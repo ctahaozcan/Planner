@@ -1,0 +1,30 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="AccentColor">#2DD4BF</Color>
+    <SolidColorBrush x:Key="AccentBrush" Color="#2DD4BF"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#5EEAD4"/>
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#134E4A"/>
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#042F2E"/>
+
+    <SolidColorBrush x:Key="AppBgBrush" Color="#0B1220"/>
+    <SolidColorBrush x:Key="SidebarBgBrush" Color="#101826"/>
+    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#243044"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#151C2C"/>
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#1C2538"/>
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#243044"/>
+    <SolidColorBrush x:Key="TextBrush" Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#94A3B8"/>
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="#64748B"/>
+    <SolidColorBrush x:Key="InputBgBrush" Color="#1C2538"/>
+    <SolidColorBrush x:Key="InputBorderBrush" Color="#334155"/>
+    <SolidColorBrush x:Key="NavHoverBrush" Color="#1E293B"/>
+    <SolidColorBrush x:Key="NavSelectedBrush" Color="#134E4A"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#F87171"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#34D399"/>
+    <SolidColorBrush x:Key="ChipBgBrush" Color="#1E293B"/>
+    <SolidColorBrush x:Key="OverlayBrush" Color="#990B1220"/>
+    <SolidColorBrush x:Key="LogoBgBrush" Color="#0F766E"/>
+    <SolidColorBrush x:Key="WorkBandBrush" Color="#0F2A28"/>
+    <SolidColorBrush x:Key="PriorityBandBrush" Color="#3F2E12"/>
+</ResourceDictionary>

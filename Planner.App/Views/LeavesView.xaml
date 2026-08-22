@@ -1,0 +1,196 @@
+<UserControl x:Class="Planner.App.Views.LeavesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="14"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource Card}" Background="{DynamicResource AccentSoftBrush}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <TextBlock Text="Kalan yıllık izin" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding RemainingText}" FontSize="28" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Yıllık izin bakiyesi" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Text="{Binding PeriodText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding BalanceDetail}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <TextBlock Text="Telafi bakiyesi" Style="{StaticResource MutedText}" FontSize="12" HorizontalAlignment="Right"/>
+                            <TextBlock Text="{Binding CompensatoryText}" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Right">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsNegativeCompensatory}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPositiveCompensatory}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Telafi bakiyesi" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Style="{StaticResource MutedText}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Negatif = borç (telafili izin). Pozitif = alacak (telafi). 0 = denk."/>
+                            <TextBlock Text="{Binding CompensatoryDetail}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                <StackPanel>
+                    <TextBlock Text="Bakiye ayarları" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Margin="0,6,0,10" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Text="İzin yılı, işe giriş ayına göre hesaplanır (o ayın 1’inden 12 ay). Onaylı ve kullanılmış yıllık izinler bakiyeden düşer (iptaller değil). Saatlik kayıtlar iş gününe (varsayılan 8,5 saat) çevrilir. Telafi bakiyesi yıllık izinden ayrıdır."/>
+                    <TextBlock Text="İzin yılı başlangıç ayı" Style="{StaticResource MutedText}"/>
+                    <ComboBox ItemsSource="{Binding Months}" DisplayMemberPath="Name"
+                              SelectedItem="{Binding SelectedMonth}" Width="200" HorizontalAlignment="Left" Margin="0,6,0,10"/>
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Yıllık izin hakkı (gün)" Style="{StaticResource MutedText}"/>
+                            <TextBox Text="{Binding AllowanceText, UpdateSourceTrigger=LostFocus}" Width="100" Margin="0,6,0,0"/>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Devir (önceki yıldan)" Style="{StaticResource MutedText}"/>
+                            <TextBox Text="{Binding CarryOverText, UpdateSourceTrigger=LostFocus}" Width="100" Margin="0,6,0,0"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="İş günü (saat)" Style="{StaticResource MutedText}"/>
+                            <TextBox Text="{Binding WorkdayHoursText, UpdateSourceTrigger=LostFocus}" Width="100" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Text="Varsayılan iş günü 8 saat 30 dakika (8,5). Uzun süreler gün + saat + dk olarak gösterilir; telafi dakika dakika işlenir."/>
+                    <CheckBox Content="Hafta sonunu da say" IsChecked="{Binding CountWeekends}" Margin="0,12,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <DockPanel Margin="0,0,0,12">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Style="{StaticResource SecondaryButton}" Content="+ Telafili izin"
+                            Command="{Binding AddTelafiliCommand}" Margin="0,0,8,0"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="+ Telafi"
+                            Command="{Binding AddTelafiCommand}" Margin="0,0,8,0"/>
+                    <Button Style="{StaticResource PrimaryButton}" Content="+ İzin ekle"
+                            Command="{Binding AddCommand}"/>
+                </StackPanel>
+                <TextBlock Text="İzin ve telafi hareketleri" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center"/>
+            </DockPanel>
+
+            <ItemsControl ItemsSource="{Binding Filters}" Margin="0,0,0,12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Name}"
+                                Command="{Binding DataContext.SetFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ChipButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{StaticResource Card}" Margin="0,0,0,14"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding EmptyTitle}" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Text="{Binding EmptyDetail}"/>
+                </StackPanel>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <Button Style="{StaticResource SecondaryButton}" Content="Düzenle" Margin="0,0,8,0"
+                                            Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Style="{StaticResource DangerButton}" Content="Sil"
+                                            Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
+                                <Border Width="6" CornerRadius="3" Margin="0,0,12,0"
+                                        Background="{Binding ColorHex, Converter={StaticResource HexToBrush}}"/>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border CornerRadius="8" Padding="8,3" Margin="0,0,8,0"
+                                                Background="{DynamicResource AccentSoftBrush}">
+                                            <TextBlock Text="{Binding KindText}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding TypeName}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center"
+                                                   Visibility="{Binding IsLedger, Converter={StaticResource BoolToVisInv}}"/>
+                                    </StackPanel>
+                                    <TextBlock Margin="0,4,0,0">
+                                        <Run Text="{Binding DateText, Mode=OneWay}"/>
+                                        <Run Text="  ·  "/>
+                                        <Run Text="{Binding DaysText, Mode=OneWay}"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding LedgerText}" Margin="0,4,0,0" FontWeight="SemiBold"
+                                               Visibility="{Binding LedgerText, Converter={StaticResource EmptyToVisInv}}"/>
+                                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding NoteText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                               Visibility="{Binding NoteText, Converter={StaticResource EmptyToVisInv}}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Style="{StaticResource Card}" Margin="0,8,0,14">
+                <StackPanel>
+                    <TextBlock Text="Özel izin türü" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Margin="0,6,0,10" Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                               Text="Listede yoksa kendi türünü ekleyebilirsin. Yıllık bakiyeden düşmek istersen kutuyu işaretle. Telafili izin ve telafi hazır türlerdir; yıllık bakiyeden düşmez."/>
+                    <TextBox Text="{Binding NewTypeName, UpdateSourceTrigger=PropertyChanged}"/>
+                    <CheckBox Content="Yıllık izin bakiyesinden düş" IsChecked="{Binding NewTypeCountsAnnual}" Margin="0,10,0,0"/>
+                    <Button Style="{StaticResource SecondaryButton}" Content="Tür ekle" HorizontalAlignment="Left"
+                            Margin="0,12,0,0" Command="{Binding AddTypeCommand}"/>
+                    <TextBlock Margin="0,16,0,0" Style="{StaticResource MutedText}" Text="Henüz özel tür yok."
+                               Visibility="{Binding HasCustomTypes, Converter={StaticResource BoolToVisInv}}"/>
+                    <DockPanel Margin="0,16,0,0" Visibility="{Binding HasCustomTypes, Converter={StaticResource BoolToVis}}">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Content="Seçili türü sil"
+                                Command="{Binding DeleteTypeCommand}"/>
+                        <ComboBox ItemsSource="{Binding CustomTypes}" DisplayMemberPath="Name"
+                                  SelectedItem="{Binding SelectedCustomType}" Margin="0,0,12,0"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource MutedText}" Margin="4,0,0,12"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

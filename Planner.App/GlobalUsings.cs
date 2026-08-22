@@ -1,0 +1,9 @@
+global using UserControl = System.Windows.Controls.UserControl;
+global using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+global using Application = System.Windows.Application;
+global using Color = System.Windows.Media.Color;
+global using ColorConverter = System.Windows.Media.ColorConverter;
+global using MessageBox = System.Windows.MessageBox;
+global using MessageBoxButton = System.Windows.MessageBoxButton;
+global using MessageBoxImage = System.Windows.MessageBoxImage;
+global using MessageBoxResult = System.Windows.MessageBoxResult;

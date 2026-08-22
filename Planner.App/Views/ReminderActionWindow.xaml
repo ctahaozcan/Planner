@@ -1,0 +1,18 @@
+<Window x:Class="Planner.App.Views.ReminderActionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Anımsatıcı" Height="220" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Topmost="True"
+        Background="{DynamicResource AppBgBrush}">
+    <StackPanel Margin="20">
+        <TextBlock x:Name="TitleText" FontWeight="SemiBold" FontSize="16" TextWrapping="Wrap"/>
+        <TextBlock Margin="0,8,0,12" Style="{StaticResource MutedText}" Text="Erteleme:"/>
+        <WrapPanel>
+            <Button Style="{StaticResource SecondaryButton}" Content="10 dk" Click="On10" Margin="0,0,8,8"/>
+            <Button Style="{StaticResource SecondaryButton}" Content="1 saat" Click="OnHour" Margin="0,0,8,8"/>
+            <Button Style="{StaticResource SecondaryButton}" Content="Bu akşam" Click="OnEvening" Margin="0,0,8,8"/>
+            <Button Style="{StaticResource SecondaryButton}" Content="Yarına" Click="OnTomorrow" Margin="0,0,8,8"/>
+        </WrapPanel>
+        <Button Style="{StaticResource PrimaryButton}" Content="Tamam" HorizontalAlignment="Right" Click="OnClose"/>
+    </StackPanel>
+</Window>

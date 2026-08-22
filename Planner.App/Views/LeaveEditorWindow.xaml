@@ -1,0 +1,84 @@
+<Window x:Class="Planner.App.Views.LeaveEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding WindowTitle}"
+        Height="780" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource AppBgBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="{Binding WindowTitle}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16"/>
+
+                <TextBlock Text="Kayıt türü" Margin="0,0,0,6"/>
+                <ComboBox ItemsSource="{Binding KindOptions}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedKind}"/>
+                <TextBlock Text="{Binding KindHint}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                <TextBlock Text="İzin türü" Margin="0,14,0,6"
+                           Visibility="{Binding ShowTypePicker, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox ItemsSource="{Binding Types}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedType}"
+                          Visibility="{Binding ShowTypePicker, Converter={StaticResource BoolToVis}}"/>
+
+                <TextBlock Text="Süre birimi" Margin="0,14,0,6"
+                           Visibility="{Binding ShowDurationPicker, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox ItemsSource="{Binding DurationOptions}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedDuration}"
+                          Visibility="{Binding ShowDurationPicker, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="{Binding DurationHint}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Visibility="{Binding ShowDurationPicker, Converter={StaticResource BoolToVis}}"/>
+
+                <TextBlock Text="Başlangıç tarihi" Margin="0,14,0,6"/>
+                <DatePicker SelectedDate="{Binding StartDate}"/>
+                <CheckBox Content="Başlangıç saati (saat ve dakika)" IsChecked="{Binding HasStartTime}" Margin="0,10,0,6"
+                          Visibility="{Binding ShowOptionalTimes, Converter={StaticResource BoolToVis}}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            Visibility="{Binding ShowStartTimePickers, Converter={StaticResource BoolToVis}}">
+                    <ComboBox ItemsSource="{Binding Hours}" SelectedItem="{Binding StartHour}" Width="80" Margin="0,0,8,0"/>
+                    <TextBlock Text=":" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding StartMinute}" Width="80"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding EndDateLabel}" Margin="0,14,0,6"/>
+                <DatePicker SelectedDate="{Binding EndDate}"/>
+                <CheckBox Content="Bitiş saati (saat ve dakika)" IsChecked="{Binding HasEndTime}" Margin="0,10,0,6"
+                          Visibility="{Binding ShowOptionalTimes, Converter={StaticResource BoolToVis}}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            Visibility="{Binding ShowEndTimePickers, Converter={StaticResource BoolToVis}}">
+                    <ComboBox ItemsSource="{Binding Hours}" SelectedItem="{Binding EndHour}" Width="80" Margin="0,0,8,0"/>
+                    <TextBlock Text=":" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding EndMinute}" Width="80"/>
+                </StackPanel>
+
+                <CheckBox Content="{Binding FirstHalfLabel}" IsChecked="{Binding FirstHalfEnabled}" Margin="0,14,0,6"
+                          Visibility="{Binding ShowHalfDay, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox ItemsSource="{Binding HalfParts}" DisplayMemberPath="Name"
+                          SelectedItem="{Binding SelectedStartHalf}"
+                          Visibility="{Binding FirstHalfEnabled, Converter={StaticResource BoolToVis}}"/>
+                <CheckBox Content="Son gün yarım" IsChecked="{Binding LastHalfEnabled}" Margin="0,12,0,6"
+                          Visibility="{Binding ShowLastHalf, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox ItemsSource="{Binding HalfParts}" DisplayMemberPath="Name"
+                          SelectedItem="{Binding SelectedEndHalf}"
+                          Visibility="{Binding ShowEndHalfPart, Converter={StaticResource BoolToVis}}"/>
+
+                <TextBlock Text="Durum" Margin="0,14,0,6"/>
+                <ComboBox ItemsSource="{Binding Statuses}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedStatus}"/>
+                <TextBlock Text="Not (onay no, açıklama)" Margin="0,12,0,6"/>
+                <TextBox Text="{Binding Note, UpdateSourceTrigger=PropertyChanged}" Height="64"
+                         TextWrapping="Wrap" AcceptsReturn="True"/>
+                <Border Margin="0,16,0,0" CornerRadius="10" Padding="12" Background="{DynamicResource AccentSoftBrush}">
+                    <TextBlock Text="{Binding PreviewText}" TextWrapping="Wrap"/>
+                </Border>
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource DangerBrush}" Margin="0,12,0,0"
+                           Visibility="{Binding ErrorMessage, Converter={StaticResource EmptyToVisInv}}"/>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource SecondaryButton}" Content="Vazgeç" Command="{Binding CancelCommand}" Margin="0,0,8,0"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Kaydet" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

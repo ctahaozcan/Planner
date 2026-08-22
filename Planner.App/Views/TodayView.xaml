@@ -1,0 +1,182 @@
+<UserControl x:Class="Planner.App.Views.TodayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Planner.App.Views">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                <Button Style="{StaticResource SecondaryButton}" Content="◀" Command="{Binding PreviousDayCommand}" Width="40" Margin="0,0,6,0"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="Bugün" Command="{Binding GoToTodayCommand}" Margin="0,0,6,0"
+                        Visibility="{Binding IsToday, Converter={StaticResource BoolToVisInv}}"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="▶" Command="{Binding NextDayCommand}" Width="40" Margin="0,0,8,0"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="+ Yeni kayıt" Command="{Binding NewTaskCommand}"/>
+            </StackPanel>
+            <StackPanel>
+                <TextBlock Text="{Binding DateLabel}" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+            </StackPanel>
+        </DockPanel>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.4*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="1*"/>
+            </Grid.ColumnDefinitions>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Leaves}" Margin="0,0,0,10"
+                                  Visibility="{Binding HasAllDayLeaves, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,6" CornerRadius="10" Padding="12,10"
+                                        Background="{DynamicResource AccentSoftBrush}"
+                                        BorderBrush="{Binding ColorHex, Converter={StaticResource HexToBrush}}"
+                                        BorderThickness="3,0,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentBrush}"/>
+                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}"
+                                                   FontSize="12" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Saatlik şerit" FontWeight="SemiBold" Margin="4,0,0,8"/>
+                    <ItemsControl ItemsSource="{Binding Hours}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,4" CornerRadius="8" Padding="8,6" BorderThickness="1"
+                                        BorderBrush="{DynamicResource CardBorderBrush}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsWorkBand}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource WorkBandBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Left" Style="{StaticResource ChipButton}" Width="64"
+                                                Content="{Binding Label}"
+                                                Command="{Binding DataContext.NewAtHourCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding Hour}"/>
+                                        <StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Leaves}"
+                                                          Visibility="{Binding HasLeaves, Converter={StaticResource BoolToVis}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="4,0,0,4" CornerRadius="8" Padding="8,4"
+                                                                Background="{DynamicResource AccentSoftBrush}">
+                                                            <TextBlock Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap">
+                                                                <Run Text="{Binding Title, Mode=OneWay}"/>
+                                                                <Run Text="  "/>
+                                                                <Run Text="{Binding HalfText, Mode=OneWay}"/>
+                                                            </TextBlock>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <views:TaskCard/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12" Background="{DynamicResource PriorityBandBrush}">
+                        <StackPanel>
+                            <TextBlock Text="Bugünün öncelikleri" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,8"
+                                       Text="En fazla 3. Karttaki «Öncelik» ile sabitleyin."/>
+                            <ItemsControl ItemsSource="{Binding Priorities}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <views:TaskCard/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Henüz öncelik yok." Style="{StaticResource MutedText}"
+                                       Visibility="{Binding Priorities.Count, Converter={StaticResource EqualsConverter}, ConverterParameter=0}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Saatsiz" FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding Untimed}" Margin="0,8,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <views:TaskCard/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Gecikmiş" FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding Overdue}" Margin="0,8,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <views:TaskCard/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Alışkanlıklar" FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding Habits}" Margin="0,8,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,0,0,6">
+                                            <CheckBox IsChecked="{Binding IsCompleted, Mode=OneWay}" Command="{Binding ToggleCommand}" Content="{Binding Name}"/>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding StreakText}" Style="{StaticResource MutedText}" FontSize="12"/>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Kişi günleri" FontWeight="SemiBold"/>
+                            <ItemsControl ItemsSource="{Binding ContactEvents}" Margin="0,8,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Margin="0,0,0,4"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Kasa kilitliyken kişi günleri gösterilmez." Style="{StaticResource MutedText}" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Günün notu" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding DailyNote, UpdateSourceTrigger=PropertyChanged}" Height="120"
+                                     TextWrapping="Wrap" AcceptsReturn="True" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

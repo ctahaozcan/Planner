@@ -1,0 +1,88 @@
+<Window x:Class="Planner.App.Views.TaskEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding WindowTitle}"
+        Height="720" Width="580"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource AppBgBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="{Binding WindowTitle}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="10" Padding="12" Margin="0,0,0,16"
+                        Visibility="{Binding IsRecurringEdit, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource AccentBrush}"
+                                   Text="Yineleyen kayıt. «Tüm seri» başlık/saat/yinelemeyi değiştirir; «Yalnızca bu gün» bu oluşumu ayırır."/>
+                        <CheckBox Content="Tüm seriyi düzenle" IsChecked="{Binding EditEntireSeries}" Margin="0,8,0,0"/>
+                        <Button Style="{StaticResource ChipButton}" Content="Bu oluşumu atla" HorizontalAlignment="Left"
+                                Margin="0,8,0,0" Command="{Binding SkipThisCommand}"/>
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="Başlık" Margin="0,0,0,6"/>
+                <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"/>
+                <TextBlock Text="Notlar" Margin="0,12,0,6"/>
+                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" Height="72" TextWrapping="Wrap" AcceptsReturn="True"/>
+                <TextBlock Text="Kategori" Margin="0,12,0,6"/>
+                <ComboBox ItemsSource="{Binding Categories}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedCategory}"/>
+                <TextBlock Text="Tarih" Margin="0,12,0,6"/>
+                <DatePicker SelectedDate="{Binding Date}"/>
+                <TextBlock Text="Saat (isteğe bağlı)" Margin="0,12,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <ComboBox ItemsSource="{Binding Hours}" SelectedItem="{Binding Hour}" Width="80" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding Minute}" Width="80"/>
+                </StackPanel>
+                <CheckBox Content="Anımsatıcı (bilgisayar saati)" IsChecked="{Binding HasReminder}" Margin="0,16,0,8"/>
+                <StackPanel Orientation="Horizontal" Visibility="{Binding HasReminder, Converter={StaticResource BoolToVis}}">
+                    <DatePicker SelectedDate="{Binding ReminderDate}" Width="180" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Hours}" SelectedItem="{Binding ReminderHour}" Width="80" Margin="0,0,8,0"/>
+                    <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding ReminderMinute}" Width="80"/>
+                </StackPanel>
+                <TextBlock Text="Yineleme" Margin="0,12,0,6"/>
+                <ComboBox ItemsSource="{Binding RecurrenceOptions}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedRecurrence}"/>
+                <WrapPanel Margin="0,8,0,0" Visibility="{Binding ShowWeekdays, Converter={StaticResource BoolToVis}}">
+                    <CheckBox Content="Pzt" IsChecked="{Binding WdMon}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Sal" IsChecked="{Binding WdTue}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Çar" IsChecked="{Binding WdWed}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Per" IsChecked="{Binding WdThu}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Cum" IsChecked="{Binding WdFri}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Cmt" IsChecked="{Binding WdSat}" Margin="0,0,8,4"/>
+                    <CheckBox Content="Paz" IsChecked="{Binding WdSun}" Margin="0,0,8,4"/>
+                </WrapPanel>
+                <CheckBox Content="Bitiş tarihi" IsChecked="{Binding HasEndDate}" Margin="0,8,0,6"/>
+                <DatePicker SelectedDate="{Binding EndDate}" Visibility="{Binding HasEndDate, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="Durum" Margin="0,12,0,6"/>
+                <ComboBox ItemsSource="{Binding Statuses}" DisplayMemberPath="Name" SelectedItem="{Binding SelectedStatus}"/>
+                <TextBlock Text="Ekler (en fazla 20 MB / dosya, kasa dışı)" Margin="0,16,0,6"/>
+                <ItemsControl ItemsSource="{Binding Attachments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,0,0,6">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource DangerButton}" Content="Kaldır" Padding="8,4"
+                                        Command="{Binding DataContext.RemoveAttachmentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"/>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Content="Aç" Padding="8,4" Margin="0,0,6,0"
+                                        Command="{Binding DataContext.OpenAttachmentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"/>
+                                <TextBlock Text="{Binding OriginalName}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource SecondaryButton}" Content="Dosya ekle" HorizontalAlignment="Left"
+                        Command="{Binding AddAttachmentCommand}"/>
+                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource DangerBrush}" Margin="0,12,0,0"
+                           Visibility="{Binding ErrorMessage, Converter={StaticResource EmptyToVisInv}}"/>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource SecondaryButton}" Content="Vazgeç" Command="{Binding CancelCommand}" Margin="0,0,8,0"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Kaydet" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>
