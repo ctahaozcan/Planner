@@ -1,0 +1,25 @@
+<Window x:Class="Planner.App.Views.FriendAgendaWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ajanda"
+        Height="560" Width="520"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        ResizeMode="CanResize"
+        Background="{DynamicResource AppBgBrush}">
+    <DockPanel Margin="16">
+        <TextBlock x:Name="HintBlock" DockPanel.Dock="Top" Style="{StaticResource MutedText}"
+                   TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Salt okunur. Düzenleme yapılamaz."/>
+        <ListBox x:Name="ItemList" BorderThickness="0" Background="Transparent">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding When}" Style="{StaticResource MutedText}" FontSize="12"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>

@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "Yaver.ChatServer": {
+      "commandName": "Project",
+      "applicationUrl": "http://127.0.0.1:47880;https://127.0.0.1:47883",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

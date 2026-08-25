@@ -52,6 +52,7 @@ public sealed class TrayIconService : IDisposable
 
         _window.Dispatcher.Invoke(() =>
         {
+            var wasHidden = !_window.IsVisible || _window.WindowState == WindowState.Minimized;
             if (!_window.IsVisible)
             {
                 _window.Show();
@@ -66,6 +67,10 @@ public sealed class TrayIconService : IDisposable
             _window.Activate();
             _window.Topmost = true;
             _window.Topmost = false;
+            if (wasHidden && _window.DataContext is ViewModels.MainViewModel vm)
+            {
+                _ = vm.ResetToHomeAsync();
+            }
         });
     }
 

@@ -23,6 +23,19 @@ public sealed class PlannerDbContext : DbContext
     public DbSet<QueuedNotification> QueuedNotifications => Set<QueuedNotification>();
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRecord> LeaveRecords => Set<LeaveRecord>();
+    public DbSet<EncryptedSocialAccount> SocialAccounts => Set<EncryptedSocialAccount>();
+    public DbSet<PersonRelationship> Relationships => Set<PersonRelationship>();
+    public DbSet<Segment> Segments => Set<Segment>();
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<MeProfile> MeProfiles => Set<MeProfile>();
+    public DbSet<PersonSegment> PersonSegments => Set<PersonSegment>();
+    public DbSet<PersonOrganization> PersonOrganizations => Set<PersonOrganization>();
+    public DbSet<TaskStatusSpan> TaskStatusSpans => Set<TaskStatusSpan>();
+    public DbSet<WorkspaceDocument> WorkspaceDocuments => Set<WorkspaceDocument>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<DocumentShare> DocumentShares => Set<DocumentShare>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,7 +54,9 @@ public sealed class PlannerDbContext : DbContext
             e.Property(x => x.Title).HasMaxLength(300).IsRequired();
             e.Property(x => x.Notes).HasMaxLength(4000);
             e.HasIndex(x => x.Date);
+            e.HasIndex(x => new { x.Date, x.SortOrder });
             e.HasIndex(x => new { x.ReminderFired, x.ReminderAt });
+            e.HasIndex(x => x.OwnerUserId);
             e.HasOne(x => x.Category)
                 .WithMany()
                 .HasForeignKey(x => x.CategoryId)
@@ -138,10 +153,122 @@ public sealed class PlannerDbContext : DbContext
             e.Property(x => x.Note).HasMaxLength(2000);
             e.HasIndex(x => new { x.StartDate, x.EndDate });
             e.HasIndex(x => x.TypeId);
+            e.HasIndex(x => x.OwnerUserId);
+            e.HasIndex(x => x.ServerLeaveId);
             e.HasOne(x => x.Type)
                 .WithMany()
                 .HasForeignKey(x => x.TypeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EncryptedSocialAccount>(e =>
+        {
+            e.ToTable("SocialAccounts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Payload).IsRequired();
+            e.HasIndex(x => x.ContactId);
+        });
+
+        modelBuilder.Entity<PersonRelationship>(e =>
+        {
+            e.ToTable("Relationships");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            e.HasIndex(x => new { x.FromPersonId, x.ToPersonId });
+        });
+
+        modelBuilder.Entity<Segment>(e =>
+        {
+            e.ToTable("Segments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.Property(x => x.ColorHex).HasMaxLength(16).IsRequired();
+        });
+
+        modelBuilder.Entity<Organization>(e =>
+        {
+            e.ToTable("Organizations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Role).HasMaxLength(160);
+            e.Property(x => x.Phone).HasMaxLength(80);
+            e.Property(x => x.Address).HasMaxLength(400);
+            e.Property(x => x.Notes).HasMaxLength(2000);
+            e.HasIndex(x => x.SegmentId);
+        });
+
+        modelBuilder.Entity<MeProfile>(e =>
+        {
+            e.ToTable("MeProfile");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            e.Property(x => x.Notes).HasMaxLength(2000);
+            e.Property(x => x.PhotoFileName).HasMaxLength(80);
+        });
+
+        modelBuilder.Entity<PersonSegment>(e =>
+        {
+            e.ToTable("PersonSegments");
+            e.HasKey(x => new { x.PersonId, x.SegmentId });
+            e.HasIndex(x => x.SegmentId);
+        });
+
+        modelBuilder.Entity<PersonOrganization>(e =>
+        {
+            e.ToTable("PersonOrganizations");
+            e.HasKey(x => new { x.PersonId, x.OrganizationId });
+            e.HasIndex(x => x.OrganizationId);
+            e.Property(x => x.Title).HasMaxLength(160);
+        });
+
+        modelBuilder.Entity<TaskStatusSpan>(e =>
+        {
+            e.ToTable("TaskStatusSpans");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TaskId);
+        });
+
+        modelBuilder.Entity<WorkspaceDocument>(e =>
+        {
+            e.ToTable("WorkspaceDocuments");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            e.Property(x => x.Body).IsRequired();
+        });
+
+        modelBuilder.Entity<AppUser>(e =>
+        {
+            e.ToTable("AppUsers");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Username).HasMaxLength(80).IsRequired();
+            e.Property(x => x.DisplayName).HasMaxLength(120).IsRequired();
+            e.Property(x => x.FirstName).HasMaxLength(80);
+            e.Property(x => x.LastName).HasMaxLength(80);
+            e.Property(x => x.Email).HasMaxLength(160);
+            e.HasIndex(x => x.Username).IsUnique();
+        });
+
+        modelBuilder.Entity<Friendship>(e =>
+        {
+            e.ToTable("Friendships");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RequesterId, x.AddresseeId }).IsUnique();
+        });
+
+        modelBuilder.Entity<DocumentShare>(e =>
+        {
+            e.ToTable("DocumentShares");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.DocumentId, x.SharedWithUserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ChatMessage>(e =>
+        {
+            e.ToTable("ChatMessages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Body).IsRequired();
+            e.HasIndex(x => new { x.ConversationKey, x.SentAt });
         });
     }
 }

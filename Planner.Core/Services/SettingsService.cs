@@ -44,4 +44,17 @@ public sealed class SettingsService
         => DateOnly.TryParse(await GetAsync(key), out var d) ? d : null;
 
     public Task SetDateAsync(string key, DateOnly date) => SetAsync(key, date.ToString("yyyy-MM-dd"));
+
+    public async Task RemoveAsync(string key)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == key);
+        if (row is null)
+        {
+            return;
+        }
+
+        db.Settings.Remove(row);
+        await db.SaveChangesAsync();
+    }
 }

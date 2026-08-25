@@ -7,7 +7,8 @@ public enum LeaveStatus
     Planlandi = 0,
     Onaylandi = 1,
     Kullanildi = 2,
-    Iptal = 3
+    Iptal = 3,
+    Reddedildi = 4
 }
 
 public enum HalfDayKind
@@ -57,6 +58,8 @@ public sealed class LeaveRecord
     public string? Note { get; set; }
     public LeaveStatus Status { get; set; }
     public int DurationMinutes { get; set; }
+    public Guid? OwnerUserId { get; set; }
+    public Guid? ServerLeaveId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -89,6 +92,7 @@ public sealed class LeaveBalance
 public sealed class CompensatoryBalance
 {
     public decimal WorkdayHours { get; init; }
+    public int OpeningMinutes { get; init; }
     public int DebitMinutes { get; init; }
     public int CreditMinutes { get; init; }
     public int NetMinutes { get; init; }
@@ -116,6 +120,7 @@ public static class LeaveStatusExtensions
         LeaveStatus.Onaylandi => "Onaylandı",
         LeaveStatus.Kullanildi => "Kullanıldı",
         LeaveStatus.Iptal => "İptal",
+        LeaveStatus.Reddedildi => "Reddedildi",
         _ => status.ToString()
     };
 
@@ -193,7 +198,7 @@ public static class LeaveMath
         => aStart <= bEnd && bStart <= aEnd;
 
     public static bool Covers(LeaveRecord leave, DateOnly date)
-        => leave.Status != LeaveStatus.Iptal && leave.StartDate <= date && date <= leave.EndDate;
+        => leave.Status is not LeaveStatus.Iptal and not LeaveStatus.Reddedildi && leave.StartDate <= date && date <= leave.EndDate;
 
     public static bool CoversHour(LeaveRecord leave, DateOnly date, int hour)
     {
@@ -314,14 +319,28 @@ public static class LeaveMath
         return sign + string.Join(" ", parts);
     }
 
-    public static string FormatLedgerMinutes(int signedMinutes, decimal workdayHours)
+    public static string FormatHoursMinutes(int totalMinutes)
+    {
+        var sign = totalMinutes < 0 ? "-" : "";
+        var remaining = Math.Abs(totalMinutes);
+        var hours = remaining / 60;
+        var mins = remaining % 60;
+        if (mins == 0)
+        {
+            return $"{sign}{hours} saat";
+        }
+
+        return $"{sign}{hours} saat {mins} dk";
+    }
+
+    public static string FormatLedgerMinutes(int signedMinutes)
     {
         if (signedMinutes == 0)
         {
-            return "0";
+            return "0 saat";
         }
 
-        var body = FormatMinutes(Math.Abs(signedMinutes), workdayHours).TrimStart('−', '-');
+        var body = FormatHoursMinutes(Math.Abs(signedMinutes));
         return signedMinutes < 0 ? "-" + body : "+" + body;
     }
 

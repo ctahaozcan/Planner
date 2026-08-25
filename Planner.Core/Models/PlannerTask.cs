@@ -13,6 +13,8 @@ public sealed class PlannerTask
     public bool ReminderFired { get; set; }
     public PlannerTaskStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IsQuickAdd { get; set; }
     public RecurrenceKind RecurrenceKind { get; set; }
@@ -22,6 +24,12 @@ public sealed class PlannerTask
     public Guid? SeriesId { get; set; }
     public bool IsSeriesException { get; set; }
     public Guid? LinkedContactId { get; set; }
+    public Guid? OwnerUserId { get; set; }
+    public Guid? AssignedToUserId { get; set; }
+    public Guid? AssignedByUserId { get; set; }
+    public Guid? ServerWorkTaskId { get; set; }
+    public string? AssignedByName { get; set; }
+    public int SortOrder { get; set; }
 
     public Guid EffectiveSeriesId => SeriesId ?? Id;
     public bool IsRecurring => RecurrenceKind != RecurrenceKind.None && !IsSeriesException;

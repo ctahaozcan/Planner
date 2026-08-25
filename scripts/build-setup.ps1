@@ -60,14 +60,40 @@ if (-not (Test-Path $portableExe)) {
     throw "Yayımlanan exe bulunamadı: $portableExe"
 }
 
+Get-Process -Name "Yaver-Setup","Planlayici-Setup" -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+
 if (Test-Path $setupExe) {
-    Remove-Item $setupExe -Force
+    $removed = $false
+    foreach ($try in 1..8) {
+        try {
+            Remove-Item $setupExe -Force -ErrorAction Stop
+            $removed = $true
+            break
+        } catch {
+            Start-Sleep -Milliseconds 400
+        }
+    }
+    if (-not $removed -and (Test-Path $setupExe)) {
+        $fallback = Join-Path $env:TEMP "Yaver-Setup.exe"
+        Write-Host "Mevcut Setup.exe kilitli (OneDrive/AV). Derleme gecici klasore yazilacak."
+        $script:setupOutputOverride = $fallback
+    }
 }
 
 Write-Host "Kurulum paketi derleniyor..."
-& $iscc "/DMyAppVersion=$version" $iss
+$isccArgs = @("/DMyAppVersion=$version")
+if ($setupOutputOverride) {
+    $isccArgs += "/O" + [System.IO.Path]::GetDirectoryName($setupOutputOverride)
+}
+$isccArgs += $iss
+& $iscc @isccArgs
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup derlemesi başarısız ($LASTEXITCODE)."
+}
+
+if ($setupOutputOverride -and (Test-Path $setupOutputOverride)) {
+    Copy-Item $setupOutputOverride $setupExe -Force
 }
 
 if (-not (Test-Path $setupExe)) {

@@ -9,7 +9,7 @@ public enum SearchKind
     DailyNote,
     Habit,
     Leave,
-    Contact
+    Document
 }
 
 public sealed class SearchHit
@@ -27,23 +27,23 @@ public sealed class SearchService
     private readonly CategoryService _categories;
     private readonly DailyNoteService _notes;
     private readonly HabitService _habits;
-    private readonly VaultService _vault;
     private readonly LeaveService _leaves;
+    private readonly DocumentService _documents;
 
     public SearchService(
         TaskService tasks,
         CategoryService categories,
         DailyNoteService notes,
         HabitService habits,
-        VaultService vault,
-        LeaveService leaves)
+        LeaveService leaves,
+        DocumentService documents)
     {
         _tasks = tasks;
         _categories = categories;
         _notes = notes;
         _habits = habits;
-        _vault = vault;
         _leaves = leaves;
+        _documents = documents;
     }
 
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, CancellationToken ct = default)
@@ -128,24 +128,17 @@ public sealed class SearchService
             }
         }
 
-        if (_vault.IsUnlocked)
+        foreach (var doc in await _documents.ListAsync(ct))
         {
-            foreach (var contact in await _vault.GetContactsAsync(ct))
+            if (Contains(doc.Title, query) || (doc.Kind == WorkspaceDocumentKind.Text && Contains(doc.Body, query)))
             {
-                if (Contains(contact.Name, query)
-                    || Contains(contact.Phone, query)
-                    || Contains(contact.Email, query)
-                    || Contains(contact.Notes, query)
-                    || Contains(contact.Relationship, query))
+                hits.Add(new SearchHit
                 {
-                    hits.Add(new SearchHit
-                    {
-                        Kind = SearchKind.Contact,
-                        Id = contact.Id,
-                        Title = contact.Name,
-                        Subtitle = contact.Phone ?? contact.Email ?? "Kişi"
-                    });
-                }
+                    Kind = SearchKind.Document,
+                    Id = doc.Id,
+                    Title = doc.Title,
+                    Subtitle = doc.Kind == WorkspaceDocumentKind.Table ? "Tablo belgesi" : "Metin belgesi"
+                });
             }
         }
 

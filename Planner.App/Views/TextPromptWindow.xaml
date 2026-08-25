@@ -1,0 +1,21 @@
+<Window x:Class="Planner.App.Views.TextPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ad" Height="220" Width="440"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{DynamicResource AppBgBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,12"/>
+            <TextBox x:Name="ValueBox" Height="40" VerticalContentAlignment="Center"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource SecondaryButton}" Content="Vazgeç" Click="OnCancel" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Tamam" Click="OnOk" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

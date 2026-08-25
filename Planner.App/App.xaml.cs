@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Planner.App.Services;
 using Planner.App.ViewModels;
+using Planner.App.Views;
 using Planner.Core;
 using Planner.Core.Data;
 using Planner.Core.Services;
@@ -14,11 +15,13 @@ namespace Planner.App;
 public partial class App : System.Windows.Application
 {
     public const string AppUserModelId = ToastNotificationService.AppUserModelId;
-    private const string MutexName = @"Local\Yaver.SingleInstance";
+    public const string MutexName = @"Local\Yaver.SingleInstance";
+    public const string ShutdownEventName = @"Local\Yaver.Shutdown";
     private const string ShowEventName = @"Local\Yaver.ShowWindow";
 
     private Mutex? _mutex;
     private EventWaitHandle? _showEvent;
+    private EventWaitHandle? _shutdownEvent;
     private CancellationTokenSource? _showLoopCts;
     private IServiceProvider? _services;
 
@@ -31,6 +34,17 @@ public partial class App : System.Windows.Application
 
         _mutex = new Mutex(true, MutexName, out var created);
         _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+        _shutdownEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShutdownEventName);
+
+        var shutdownRequested = e.Args.Any(a =>
+            string.Equals(a, "--shutdown", StringComparison.OrdinalIgnoreCase));
+        if (shutdownRequested)
+        {
+            _shutdownEvent.Set();
+            Shutdown();
+            return;
+        }
+
         if (!created)
         {
             _showEvent.Set();
@@ -60,6 +74,31 @@ public partial class App : System.Windows.Application
         }
 
         ToastNotificationManagerCompat.OnActivated += OnToastActivated;
+
+        var users = _services.GetRequiredService<UserAccountService>();
+        await users.EnsureDefaultAsync(Environment.UserName);
+        if (!users.IsSignedIn)
+        {
+            var auth = new AuthWindow(_services.GetRequiredService<AuthViewModel>())
+            {
+                ShowInTaskbar = true
+            };
+            var ok = auth.ShowDialog() == true && users.IsSignedIn;
+            if (!ok)
+            {
+                Shutdown();
+                return;
+            }
+        }
+
+        var toast = _services.GetRequiredService<ToastNotificationService>();
+        _services.GetRequiredService<ITaskChangeSignal>().Info += toast.ShowInfo;
+
+        await _services.GetRequiredService<TaskService>().BackfillStatusSpansAsync();
+        _ = _services.GetRequiredService<OrgWorkService>();
+        await _services.GetRequiredService<ChatHub>().StartAsync();
+        await _services.GetRequiredService<OrgWorkService>().SyncInboxAsync();
+        _ = _services.GetRequiredService<CallService>();
 
         _services.GetRequiredService<ReminderScheduler>().Start();
 
@@ -97,14 +136,24 @@ public partial class App : System.Windows.Application
         services.AddSingleton<SettingsService>();
         services.AddSingleton<VaultService>();
         services.AddSingleton<HabitService>();
+        services.AddSingleton<UserAccountService>();
         services.AddSingleton<LeaveService>();
         services.AddSingleton<DailyNoteService>();
         services.AddSingleton<PriorityService>();
         services.AddSingleton<AttachmentService>();
         services.AddSingleton<BackupService>();
+        services.AddSingleton<DocumentService>();
+        services.AddSingleton<DocumentExportService>();
+        services.AddSingleton<FriendshipService>();
+        services.AddSingleton<ChatStore>();
+        services.AddSingleton<LanChatService>();
+        services.AddSingleton<ServerChatClient>();
+        services.AddSingleton<ChatHub>();
+        services.AddSingleton<CallService>();
         services.AddSingleton<SearchService>();
         services.AddSingleton<FocusTimerService>();
         services.AddSingleton<BriefingService>();
+        services.AddSingleton<TaskRolloverService>();
         services.AddSingleton<ReminderScheduler>();
         services.AddSingleton<ToastNotificationService>();
         services.AddSingleton<IReminderNotifier>(sp => sp.GetRequiredService<ToastNotificationService>());
@@ -116,12 +165,17 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AgendaViewModel>();
         services.AddSingleton<WeekViewModel>();
         services.AddSingleton<TasksViewModel>();
+        services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<HabitsViewModel>();
         services.AddSingleton<LeavesViewModel>();
-        services.AddSingleton<ContactsViewModel>();
+        services.AddSingleton<DocumentsViewModel>();
+        services.AddSingleton<ChatViewModel>();
+        services.AddSingleton<OrgWorkService>();
+        services.AddSingleton<OrgWorkViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<MainViewModel>();
         services.AddTransient<TaskEditorViewModel>();
+        services.AddTransient<AuthViewModel>();
         services.AddSingleton<MainWindow>();
     }
 
@@ -141,18 +195,43 @@ public partial class App : System.Windows.Application
             }
 
             _services?.GetService<TrayIconService>()?.ShowMainWindow();
+            if (action is "friendAccept" or "friendDecline" or "friendRequest"
+                && args.TryGetValue("peerKey", out var peerKey))
+            {
+                args.TryGetValue("name", out var name);
+                _ = HandleFriendToastAsync(action, peerKey, name ?? "");
+            }
         });
+    }
+
+    private async Task HandleFriendToastAsync(string action, string peerKey, string name)
+    {
+        if (_services is null)
+        {
+            return;
+        }
+
+        var main = _services.GetRequiredService<MainViewModel>();
+        await main.OpenChatAsync();
+        await main.Chat.HandleFriendToastAsync(action, peerKey, name);
     }
 
     private void ListenForShowRequests(CancellationToken ct)
     {
+        var handles = new WaitHandle[] { _showEvent!, _shutdownEvent! };
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                if (_showEvent?.WaitOne(TimeSpan.FromSeconds(2)) == true)
+                var signaled = WaitHandle.WaitAny(handles, TimeSpan.FromSeconds(2));
+                if (signaled == 0)
                 {
                     Dispatcher.Invoke(() => _services?.GetService<TrayIconService>()?.ShowMainWindow());
+                }
+                else if (signaled == 1)
+                {
+                    Dispatcher.Invoke(() => _services?.GetService<TrayIconService>()?.RequestExit());
+                    break;
                 }
             }
             catch (ObjectDisposedException)
@@ -167,6 +246,8 @@ public partial class App : System.Windows.Application
         _showLoopCts?.Cancel();
         try
         {
+            _services?.GetService<CallService>()?.Dispose();
+            _services?.GetService<ChatHub>()?.Dispose();
             _services?.GetService<ReminderScheduler>()?.Dispose();
             _services?.GetService<VaultService>()?.Lock();
             _services?.GetService<HotkeyService>()?.Dispose();
@@ -179,7 +260,16 @@ public partial class App : System.Windows.Application
         }
 
         _showEvent?.Dispose();
-        _mutex?.ReleaseMutex();
+        _shutdownEvent?.Dispose();
+        try
+        {
+            _mutex?.ReleaseMutex();
+        }
+        catch (ApplicationException)
+        {
+            // mutex bu süreçte alınmamış olabilir (--shutdown)
+        }
+
         _mutex?.Dispose();
         base.OnExit(e);
     }

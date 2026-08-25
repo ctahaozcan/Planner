@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Planner.Core.Data;
 using Planner.Core.Models;
@@ -28,6 +29,16 @@ public sealed class AttachmentService
 
     public async Task<TaskAttachment> AddAsync(Guid taskId, string sourcePath, CancellationToken ct = default)
     {
+        var staged = StageCopy(sourcePath);
+        return await CommitStagedAsync(taskId, staged, ct);
+    }
+
+    /// <summary>
+    /// Kaynağı hemen uygulama klasörüne kopyalar; veritabanına yazmaz.
+    /// Yeni görev kaydedilmeden önce açılabilsin diye kullanılır.
+    /// </summary>
+    public TaskAttachment StageCopy(string sourcePath)
+    {
         if (!File.Exists(sourcePath))
         {
             throw new FileNotFoundException("Dosya bulunamadı.", sourcePath);
@@ -39,29 +50,115 @@ public sealed class AttachmentService
             throw new InvalidOperationException("Dosya 20 MB sınırını aşıyor.");
         }
 
+        Directory.CreateDirectory(AppPaths.AttachmentsDirectory);
         var id = Guid.NewGuid();
         var stored = id.ToString("N") + Path.GetExtension(sourcePath);
         var dest = Path.Combine(AppPaths.AttachmentsDirectory, stored);
         File.Copy(sourcePath, dest, overwrite: false);
 
-        var row = new TaskAttachment
+        return new TaskAttachment
         {
             Id = id,
-            TaskId = taskId,
+            TaskId = Guid.Empty,
             OriginalName = Path.GetFileName(sourcePath),
             StoredFileName = stored,
             SizeBytes = info.Length,
             CreatedAt = DateTime.Now
         };
+    }
 
+    public async Task<TaskAttachment> CommitStagedAsync(Guid taskId, TaskAttachment staged, CancellationToken ct = default)
+    {
+        staged.TaskId = taskId;
         await using var db = await _factory.CreateDbContextAsync(ct);
-        db.TaskAttachments.Add(row);
+        db.TaskAttachments.Add(staged);
         await db.SaveChangesAsync(ct);
-        return row;
+        return staged;
     }
 
     public string GetFullPath(TaskAttachment attachment)
-        => Path.Combine(AppPaths.AttachmentsDirectory, attachment.StoredFileName);
+    {
+        var stored = attachment.StoredFileName;
+        if (string.IsNullOrWhiteSpace(stored))
+        {
+            return "";
+        }
+
+        if (Path.IsPathRooted(stored) && File.Exists(stored))
+        {
+            return stored;
+        }
+
+        var name = Path.GetFileName(stored);
+        return Path.Combine(AppPaths.AttachmentsDirectory, name);
+    }
+
+    public string? ResolveExistingPath(TaskAttachment attachment)
+    {
+        var primary = GetFullPath(attachment);
+        if (!string.IsNullOrWhiteSpace(primary) && File.Exists(primary))
+        {
+            return primary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(attachment.StoredFileName))
+        {
+            var raw = attachment.StoredFileName.Trim();
+            if (File.Exists(raw))
+            {
+                return raw;
+            }
+        }
+
+        return null;
+    }
+
+    public bool TryOpen(TaskAttachment attachment, out string error)
+    {
+        var path = ResolveExistingPath(attachment);
+        if (path is null)
+        {
+            var expected = GetFullPath(attachment);
+            error = string.IsNullOrWhiteSpace(attachment.OriginalName)
+                ? "Ek dosyası bulunamadı. Dosya uygulama klasörüne kopyalanmamış veya silinmiş olabilir."
+                : $"«{attachment.OriginalName}» açılamadı. Dosya uygulama klasöründe yok (silinmiş veya kopyalanmamış olabilir).\n\nAranan konum:\n{expected}";
+            return false;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true,
+                Verb = "open",
+                ErrorDialog = true
+            });
+            error = "";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"«{attachment.OriginalName}» varsayılan uygulamayla açılamadı.\n{ex.Message}";
+            return false;
+        }
+    }
+
+    public void DeleteStoredFile(TaskAttachment attachment)
+    {
+        var path = GetFullPath(attachment);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // dosya kilitli olabilir
+        }
+    }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
@@ -77,7 +174,7 @@ public sealed class AttachmentService
         await db.SaveChangesAsync(ct);
         try
         {
-            if (File.Exists(path))
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
             {
                 File.Delete(path);
             }

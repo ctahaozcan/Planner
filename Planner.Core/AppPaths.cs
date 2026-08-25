@@ -19,7 +19,13 @@ public static class AppPaths
 
     public static string AttachmentsDirectory { get; } = Path.Combine(Root, "attachments");
 
+    public static string PortraitsDirectory { get; } = Path.Combine(Root, "portraits");
+
+    public static string DocumentsDirectory { get; } = Path.Combine(Root, "documents");
+
     public static string BackupsDirectory { get; } = Path.Combine(Root, "backups");
+
+    public static string ChatMediaDirectory { get; } = Path.Combine(Root, "chat-media");
 
     public static string ConnectionString => $"Data Source={DatabaseFile}";
 
@@ -28,7 +34,10 @@ public static class AppPaths
         TryMigrateFromLegacy();
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(AttachmentsDirectory);
+        Directory.CreateDirectory(PortraitsDirectory);
         Directory.CreateDirectory(BackupsDirectory);
+        Directory.CreateDirectory(DocumentsDirectory);
+        Directory.CreateDirectory(ChatMediaDirectory);
     }
 
     /// <summary>

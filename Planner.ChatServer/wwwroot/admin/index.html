@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Yaver yönetim</title>
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --line:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#14b8a6; --danger:#f87171; --soft:#134e4a; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    h1,h2,h3 { font-weight:600; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor:pointer; border:0; border-radius:10px; padding:8px 14px; background:var(--accent); color:#042f2e; font-weight:600; }
+    button.ghost { background:#1f2937; color:var(--text); }
+    button.danger { background:#7f1d1d; color:#fecaca; }
+    input, select, textarea { width:100%; background:#0b1220; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+    .wrap { max-width:1200px; margin:0 auto; padding:24px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .row > * { flex:1; min-width:160px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .err { color:var(--danger); min-height:1.2em; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+    .layout { display:grid; grid-template-columns: 280px 1fr; gap:16px; }
+    @media (max-width: 900px) { .layout { grid-template-columns:1fr; } }
+    .company { padding:10px 12px; border-radius:10px; cursor:pointer; }
+    .company:hover, .company.on { background:var(--soft); }
+    .tree { font-size:14px; line-height:1.6; }
+    .hidden { display:none !important; }
+    label { display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+    .field { margin-bottom:10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Yaver yönetim</h1>
+    <p class="muted">Şirket, kadro, davet, izin yetkisi ve denetim. Boş kadroyu kimse kendi seçemez; davet kodu veya e-posta kilidi ile oturtulur.</p>
+    <div id="httpsNote" class="card">
+      <strong>HTTPS / üretim.</strong>
+      <p class="muted">Yerel HTTPS kapı 47883 (kendinden imzalı). Üretimde Nginx/Caddy reverse proxy ile gerçek sertifika kullanın; Kestrel’i loopback’te bırakın. İlk girişten sonra varsayılan yönetici şifresini değiştirin (en az 12 karakter).</p>
+      <pre class="muted" style="white-space:pre-wrap"># nginx örneği
+server {
+  listen 443 ssl;
+  server_name yaver.firma.com;
+  ssl_certificate     /etc/ssl/certs/yaver.pem;
+  ssl_certificate_key /etc/ssl/private/yaver.key;
+  location / {
+    proxy_pass http://127.0.0.1:47880;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    client_max_body_size 25m;
+  }
+}</pre>
+    </div>
+
+    <div id="login" class="card">
+      <h2>Giriş</h2>
+      <p class="muted">İlk kurulumda şifre <code>appsettings.json</code> → <code>Admin:Password</code> (eski varsayılan: YaverAdmin). Hash veritabanında saklanır; panelden güçlü şifreye geçin.</p>
+      <div class="field"><label>Yönetici şifresi</label><input id="adminPass" type="password"/></div>
+      <button onclick="login()">Giriş</button>
+      <p class="err" id="loginErr"></p>
+    </div>
+
+    <div id="app" class="hidden">
+      <div class="row" style="margin-bottom:12px">
+        <button class="ghost" onclick="logout()">Çıkış</button>
+      </div>
+      <div id="weakPass" class="card hidden">
+        <h3>Yönetici şifresini değiştirin</h3>
+        <p class="muted">Hâlâ varsayılan veya zayıf şifre. Üretimde reverse proxy + güçlü şifre şart.</p>
+        <div class="row">
+          <div class="field"><label>Mevcut</label><input id="oldPass" type="password"/></div>
+          <div class="field"><label>Yeni (en az 12)</label><input id="newPass" type="password"/></div>
+        </div>
+        <button onclick="changePassword()">Şifreyi kaydet</button>
+        <p class="err" id="passErr"></p>
+      </div>
+      <div class="layout">
+        <div>
+          <div class="card">
+            <h3>Şirketler</h3>
+            <div id="companyList"></div>
+          </div>
+          <div class="card">
+            <h3>Yeni şirket</h3>
+            <div class="field"><label>Ad</label><input id="newName"/></div>
+            <div class="field"><label>Alan adı</label><input id="newDomain" placeholder="firma.com"/></div>
+            <button onclick="createCompany()">Ekle</button>
+            <p class="err" id="companyErr"></p>
+          </div>
+        </div>
+        <div id="detail" class="hidden">
+          <div class="card">
+            <h3 id="detailTitle">Şirket</h3>
+            <div class="row">
+              <div class="field"><label>Ad</label><input id="editName"/></div>
+              <div class="field"><label>Alan adı</label><input id="editDomain"/></div>
+            </div>
+            <div class="field"><label>Not</label><textarea id="editNotes" rows="2"></textarea></div>
+            <label class="muted"><input id="editActive" type="checkbox" checked/> Aktif (kayıtta görünsün)</label>
+            <div class="row" style="margin-top:10px">
+              <button onclick="saveCompany()">Kaydet</button>
+              <button class="danger" onclick="deleteCompany()">Şirketi sil</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Birim / takım</h3>
+            <div class="row">
+              <div class="field"><label>Ad</label><input id="unitName"/></div>
+              <div class="field"><label>Tür</label>
+                <select id="unitKind"><option value="unit">Birim</option><option value="team">Takım</option></select>
+              </div>
+              <div class="field"><label>Üst birim</label><select id="unitParent"></select></div>
+            </div>
+            <button onclick="addUnit()">Birim ekle</button>
+            <table id="unitTable"></table>
+          </div>
+
+          <div class="card">
+            <h3>Görev tanımları (şema)</h3>
+            <p class="muted">«Bağlı olduğu görev» bir kademe yukarıdır. İzin talebi bir üst amire düşer. «İzin yetkilisi» işaretli kadro (ör. İK) şirket genelinde onaylayabilir.</p>
+            <div class="row">
+              <div class="field"><label>Başlık</label><input id="posTitle" placeholder="Müdür, ekip lideri…"/></div>
+              <div class="field"><label>Birim</label><select id="posUnit"></select></div>
+              <div class="field"><label>Bağlı olduğu görev</label><select id="posBoss"></select></div>
+            </div>
+            <label class="muted"><input id="posApprove" type="checkbox"/> İzin yetkilisi (üst amir dışında da onaylar)</label>
+            <button onclick="addPosition()" style="margin-top:10px">Görev tanımı ekle</button>
+            <table id="posTable"></table>
+          </div>
+
+          <div class="card">
+            <h3>Kadroya davet</h3>
+            <p class="muted">Boş «Genel Müdür» kadrosunu kayıtta herkes seçemez. Davet kodu üretin; isteğe bağlı e-posta kilidi.</p>
+            <div class="row">
+              <div class="field"><label>Kadro</label><select id="invitePos"></select></div>
+              <div class="field"><label>E-posta kilidi (isteğe bağlı)</label><input id="inviteEmail" placeholder="ali@firma.com"/></div>
+              <div class="field"><label>Gün</label><input id="inviteDays" type="number" value="14" min="1" max="90"/></div>
+            </div>
+            <button onclick="createInvite()">Davet üret</button>
+            <p class="muted" id="inviteHint"></p>
+            <table id="inviteTable"></table>
+          </div>
+
+          <div class="card">
+            <h3>Organizasyon şeması</h3>
+            <div class="tree" id="chart"></div>
+          </div>
+
+          <div class="card">
+            <h3>Kayıtlı çalışanlar</h3>
+            <table id="memberTable"></table>
+          </div>
+
+          <div class="card">
+            <h3>Denetim günlüğü</h3>
+            <p class="muted">Kim kime ne görev verdi, izin kararı, davet kullanımı, kurum dosyası.</p>
+            <table id="auditTable"></table>
+          </div>
+        </div>
+      </div>
+      <p class="err" id="appErr"></p>
+    </div>
+  </div>
+<script>
+let token = sessionStorage.getItem("yaverAdmin") || "";
+let companies = [];
+let selected = null;
+let catalog = { units: [], positions: [] };
+let members = [];
+let invites = [];
+let weakPassword = sessionStorage.getItem("yaverAdminWeak") === "1";
+
+const $ = id => document.getElementById(id);
+function showApp() {
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  $("weakPass").classList.toggle("hidden", !weakPassword);
+}
+if (token) showApp();
+
+async function api(path, method, body) {
+  const res = await fetch(path, {
+    method: method || "GET",
+    headers: { "Content-Type": "application/json", "Authorization": token ? "Bearer " + token : "" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (res.status === 401) { logout(); throw new Error("Oturum yok"); }
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+  if (!res.ok) throw new Error(data?.error || ("Hata " + res.status));
+  return data;
+}
+
+async function login() {
+  $("loginErr").textContent = "";
+  try {
+    const data = await api("/v1/admin/login", "POST", { password: $("adminPass").value });
+    token = data.token;
+    weakPassword = !!data.weakPassword;
+    sessionStorage.setItem("yaverAdmin", token);
+    sessionStorage.setItem("yaverAdminWeak", weakPassword ? "1" : "0");
+    if (!data.usingHttps) {
+      $("httpsNote").style.borderColor = "#f87171";
+    }
+    showApp();
+    await loadCompanies();
+  } catch (e) { $("loginErr").textContent = e.message; }
+}
+function logout() {
+  token = ""; weakPassword = false;
+  sessionStorage.removeItem("yaverAdmin");
+  sessionStorage.removeItem("yaverAdminWeak");
+  $("app").classList.add("hidden"); $("login").classList.remove("hidden");
+}
+async function changePassword() {
+  $("passErr").textContent = "";
+  try {
+    await api("/v1/admin/password", "POST", { current: $("oldPass").value, next: $("newPass").value });
+    weakPassword = false;
+    sessionStorage.setItem("yaverAdminWeak", "0");
+    $("weakPass").classList.add("hidden");
+    $("oldPass").value = ""; $("newPass").value = "";
+  } catch (e) { $("passErr").textContent = e.message; }
+}
+
+async function loadCompanies() {
+  companies = await api("/v1/admin/companies");
+  $("companyList").innerHTML = companies.map(c =>
+    `<div class="company ${selected && selected.id===c.id ? "on":""}" onclick="selectCompany('${c.id}')">${esc(c.name)}<div class="muted">${esc(c.domain)}</div></div>`
+  ).join("") || "<p class='muted'>Henüz şirket yok.</p>";
+}
+
+async function createCompany() {
+  $("companyErr").textContent = "";
+  try {
+    await api("/v1/admin/companies", "POST", { name: $("newName").value, domain: $("newDomain").value, active: true });
+    $("newName").value = ""; $("newDomain").value = "";
+    await loadCompanies();
+  } catch (e) { $("companyErr").textContent = e.message; }
+}
+
+async function selectCompany(id) {
+  selected = companies.find(c => c.id === id);
+  if (!selected) return;
+  $("detail").classList.remove("hidden");
+  $("detailTitle").textContent = selected.name;
+  $("editName").value = selected.name;
+  $("editDomain").value = selected.domain;
+  $("editNotes").value = selected.notes || "";
+  $("editActive").checked = selected.active !== false;
+  await loadCompanies();
+  await refreshDetail();
+}
+
+async function saveCompany() {
+  if (!selected) return;
+  selected = await api("/v1/admin/companies/" + selected.id, "PUT", {
+    name: $("editName").value, domain: $("editDomain").value,
+    notes: $("editNotes").value, active: $("editActive").checked
+  });
+  await loadCompanies();
+  $("detailTitle").textContent = selected.name;
+}
+
+async function deleteCompany() {
+  if (!selected || !confirm("Şirket, birimler ve görev tanımları silinsin mi?")) return;
+  await api("/v1/admin/companies/" + selected.id, "DELETE");
+  selected = null;
+  $("detail").classList.add("hidden");
+  await loadCompanies();
+}
+
+async function refreshDetail() {
+  if (!selected) return;
+  catalog = await api("/v1/admin/companies/" + selected.id + "/catalog");
+  members = await api("/v1/admin/companies/" + selected.id + "/members");
+  invites = await api("/v1/admin/invites?companyId=" + selected.id);
+  const audit = await api("/v1/admin/audit?companyId=" + selected.id);
+  fillSelects();
+  renderUnits();
+  renderPositions();
+  renderChart();
+  renderMembers();
+  renderInvites();
+  renderAudit(audit || []);
+}
+
+function fillSelects() {
+  const units = catalog.units || [];
+  const positions = catalog.positions || [];
+  $("unitParent").innerHTML = `<option value="">(üst yok)</option>` + units.map(u => `<option value="${u.id}">${esc(u.path || u.name)}</option>`).join("");
+  $("posUnit").innerHTML = units.map(u => `<option value="${u.id}">${esc(u.path || u.name)}</option>`).join("");
+  $("posBoss").innerHTML = `<option value="">(en üst / kök)</option>` + positions.map(p => `<option value="${p.id}">${esc(p.title)} · ${esc(p.unitName)}</option>`).join("");
+  $("invitePos").innerHTML = positions.filter(p => !p.occupied).map(p => `<option value="${p.id}">${esc(p.title)} · ${esc(p.unitName)}</option>`).join("");
+}
+
+function renderUnits() {
+  const units = catalog.units || [];
+  $("unitTable").innerHTML = "<tr><th>Birim</th><th>Tür</th><th></th></tr>" + units.map(u =>
+    `<tr><td>${esc(u.path || u.name)}</td><td>${u.kind==="team"?"Takım":"Birim"}</td>
+     <td><button class="danger" onclick="delUnit('${u.id}')">Sil</button></td></tr>`
+  ).join("");
+}
+
+function renderPositions() {
+  const positions = catalog.positions || [];
+  $("posTable").innerHTML = "<tr><th>Görev</th><th>Birim</th><th>Bir üst</th><th>İzin</th><th>Oturan</th><th></th></tr>" + positions.map(p =>
+    `<tr><td>${esc(p.title)}</td><td>${esc(p.unitName)}</td><td>${esc(p.reportsToTitle || "—")}</td>
+     <td>${p.canApproveLeaves ? "yetkili" : "üst amir"} <button class="ghost" onclick="toggleApprove('${p.id}')">değiştir</button></td>
+     <td>${p.occupied ? esc(p.occupantName) : "<span class='muted'>boş</span>"}</td>
+     <td><button class="danger" onclick="delPos('${p.id}')">Sil</button></td></tr>`
+  ).join("");
+}
+
+function renderChart() {
+  const positions = catalog.positions || [];
+  const byBoss = {};
+  positions.forEach(p => {
+    const key = p.reportsToPositionId || "root";
+    (byBoss[key] = byBoss[key] || []).push(p);
+  });
+  function branch(id, depth) {
+    return (byBoss[id] || []).map(p => {
+      const who = p.occupied ? p.occupantName : "boş kadro";
+      return `<div style="margin-left:${depth*18}px">▸ <b>${esc(p.title)}</b> <span class="muted">(${esc(p.unitName)} · ${esc(who)})</span>${branch(p.id, depth+1)}</div>`;
+    }).join("");
+  }
+  $("chart").innerHTML = branch("root", 0) || "<p class='muted'>Görev tanımı ekleyin. Kök görevlerin «bağlı olduğu» boş kalsın.</p>";
+}
+
+function renderMembers() {
+  $("memberTable").innerHTML = "<tr><th>Ad</th><th>E-posta</th><th>Birim</th><th>Görev</th></tr>" +
+    (members || []).map(m => `<tr><td>${esc(m.displayName)} <span class="muted">@${esc(m.username)}</span></td><td>${esc(m.email)}</td><td>${esc(m.unitName||"—")}</td><td>${esc(m.positionTitle||"—")}</td></tr>`).join("")
+    || "<tr><td class='muted' colspan='4'>Henüz kayıt yok.</td></tr>";
+}
+
+async function addUnit() {
+  $("appErr").textContent = "";
+  try {
+    await api("/v1/admin/units", "POST", {
+      companyId: selected.id, name: $("unitName").value, kind: $("unitKind").value,
+      parentId: $("unitParent").value || null
+    });
+    $("unitName").value = "";
+    await refreshDetail();
+  } catch (e) { $("appErr").textContent = e.message; }
+}
+async function delUnit(id) {
+  try { await api("/v1/admin/units/" + id, "DELETE"); await refreshDetail(); }
+  catch (e) { $("appErr").textContent = e.message; }
+}
+async function addPosition() {
+  $("appErr").textContent = "";
+  try {
+    await api("/v1/admin/positions", "POST", {
+      companyId: selected.id, unitId: $("posUnit").value, title: $("posTitle").value,
+      reportsToPositionId: $("posBoss").value || null,
+      canApproveLeaves: $("posApprove").checked
+    });
+    $("posTitle").value = "";
+    $("posApprove").checked = false;
+    await refreshDetail();
+  } catch (e) { $("appErr").textContent = e.message; }
+}
+function renderInvites() {
+  $("inviteTable").innerHTML = "<tr><th>Kod</th><th>Kadro</th><th>E-posta</th><th>Durum</th><th></th></tr>" +
+    (invites || []).map(i => {
+      const used = i.usedAt ? ("kullandı: " + esc(i.usedByName || "—")) : ("son " + new Date(i.expiresAt).toLocaleDateString("tr-TR"));
+      return `<tr><td><code>${esc(i.code)}</code></td><td>${esc(i.positionTitle)} · ${esc(i.unitName)}</td>
+        <td>${esc(i.email || "—")}</td><td class="muted">${used}</td>
+        <td>${i.usedAt ? "" : `<button class="ghost" onclick="copyCode('${i.code}')">Kopyala</button>
+        <button class="danger" onclick="delInvite('${i.id}')">İptal</button>`}</td></tr>`;
+    }).join("") || "<tr><td class='muted' colspan='5'>Davet yok.</td></tr>";
+}
+async function createInvite() {
+  $("appErr").textContent = "";
+  $("inviteHint").textContent = "";
+  try {
+    const row = await api("/v1/admin/invites", "POST", {
+      companyId: selected.id, positionId: $("invitePos").value,
+      email: $("inviteEmail").value || null, days: Number($("inviteDays").value || 14)
+    });
+    $("inviteEmail").value = "";
+    $("inviteHint").textContent = "Kod: " + row.code + " — kayıt ekranına verin.";
+    await refreshDetail();
+  } catch (e) { $("appErr").textContent = e.message; }
+}
+async function delInvite(id) {
+  try { await api("/v1/admin/invites/" + id, "DELETE"); await refreshDetail(); }
+  catch (e) { $("appErr").textContent = e.message; }
+}
+function copyCode(code) {
+  navigator.clipboard.writeText(code).then(() => { $("inviteHint").textContent = "Kopyalandı: " + code; }).catch(() => {});
+}
+function renderAudit(rows) {
+  $("auditTable").innerHTML = "<tr><th>Zaman</th><th>Kim</th><th>Ne</th><th>Kime</th><th>Ayrıntı</th></tr>" +
+    (rows || []).map(r => `<tr><td class="muted">${new Date(r.at).toLocaleString("tr-TR")}</td>
+      <td>${esc(r.actorName)}</td><td>${esc(r.action)}</td><td>${esc(r.targetName || "—")}</td><td>${esc(r.detail)}</td></tr>`).join("")
+    || "<tr><td class='muted' colspan='5'>Henüz kayıt yok.</td></tr>";
+}
+async function delPos(id) {
+  try { await api("/v1/admin/positions/" + id, "DELETE"); await refreshDetail(); }
+  catch (e) { $("appErr").textContent = e.message; }
+}
+async function toggleApprove(id) {
+  const p = (catalog.positions || []).find(x => x.id === id);
+  if (!p) return;
+  try {
+    await api("/v1/admin/positions/" + id, "PUT", {
+      companyId: selected.id, unitId: p.unitId, title: p.title,
+      reportsToPositionId: p.reportsToPositionId || null, sortOrder: p.sortOrder || 0,
+      canApproveLeaves: !p.canApproveLeaves
+    });
+    await refreshDetail();
+  } catch (e) { $("appErr").textContent = e.message; }
+}
+function esc(s) { return (s||"").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+if (token) loadCompanies().catch(() => logout());
+</script>
+</body>
+</html>

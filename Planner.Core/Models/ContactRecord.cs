@@ -14,4 +14,6 @@ public sealed class ContactRecord
     public DateOnly? Anniversary { get; set; }
     public DateOnly? LastContactDate { get; set; }
     public bool FollowUpThisWeek { get; set; }
+    public string? PhotoFileName { get; set; }
+    public List<SocialAccount> SocialAccounts { get; set; } = [];
 }

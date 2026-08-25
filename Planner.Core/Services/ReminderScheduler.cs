@@ -14,6 +14,7 @@ public sealed class ReminderScheduler : IDisposable
     private readonly SettingsService _settings;
     private readonly FocusTimerService _focus;
     private readonly BriefingService _briefing;
+    private readonly TaskRolloverService _rollover;
     private readonly object _gate = new();
     private CancellationTokenSource? _cts;
     private bool _disposed;
@@ -26,7 +27,8 @@ public sealed class ReminderScheduler : IDisposable
         HabitService habits,
         SettingsService settings,
         FocusTimerService focus,
-        BriefingService briefing)
+        BriefingService briefing,
+        TaskRolloverService rollover)
     {
         _factory = factory;
         _notifier = notifier;
@@ -36,6 +38,7 @@ public sealed class ReminderScheduler : IDisposable
         _settings = settings;
         _focus = focus;
         _briefing = briefing;
+        _rollover = rollover;
         _signal.TasksChanged += OnTasksChanged;
     }
 
@@ -116,6 +119,7 @@ public sealed class ReminderScheduler : IDisposable
         var today = DateOnly.FromDateTime(now);
         var quiet = await IsQuietAsync(now);
 
+        await _rollover.ApplyAsync(ct);
         await FireTasksAsync(now, quiet, ct);
         await FireHabitsAsync(now, today, quiet, ct);
         await FireBriefingAsync(now, today, quiet, ct);
@@ -297,6 +301,8 @@ public sealed class ReminderScheduler : IDisposable
         {
             Consider(end);
         }
+
+        Consider(today.AddDays(1).ToDateTime(TimeOnly.MinValue));
 
         var quietOn = await _settings.GetBoolAsync(SettingKeys.QuietHoursEnabled);
         if (quietOn)

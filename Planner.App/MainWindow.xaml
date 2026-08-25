@@ -5,7 +5,7 @@
         xmlns:views="clr-namespace:Planner.App.Views"
         Title="Yaver"
         Icon="Assets/app.ico"
-        Height="840" Width="1280"
+        Height="840" Width="1320"
         MinHeight="640" MinWidth="980"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppBgBrush}">
@@ -25,6 +25,41 @@
                 BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="16,12,16,20">
+                    <TextBlock Text="Tema" Style="{StaticResource MutedText}" FontSize="12" Margin="4,0,0,6"/>
+                    <Border CornerRadius="10" Background="{DynamicResource SurfaceAltBrush}" Padding="3" Margin="0,0,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="Aydınlık" Command="{Binding SetLightThemeCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ThemeChipButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Grid.Column="1" Content="Karanlık" Command="{Binding SetDarkThemeCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ThemeChipButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDarkTheme}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
+                    </Border>
                     <Button Style="{StaticResource PrimaryButton}" Content="{Binding FocusText}"
                             Command="{Binding ToggleFocusCommand}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding FocusPhaseText}" Style="{StaticResource MutedText}" FontSize="12"
@@ -38,7 +73,7 @@
                 <StackPanel Margin="16,22,16,0">
                     <StackPanel Orientation="Horizontal" Margin="4,0,0,24">
                         <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource LogoBgBrush}">
-                            <TextBlock Text="✓" Foreground="White" FontWeight="Bold" FontSize="18"
+                            <TextBlock Text="✓" Foreground="{DynamicResource LogoGlyphBrush}" FontWeight="Bold" FontSize="18"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
@@ -124,6 +159,24 @@
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="Transparent"/>
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsHistoryPage}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource NavSelectedBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Button Style="{StaticResource NavButton}" Command="{Binding GoHistoryCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE81C;" FontSize="16" Width="24"/>
+                                <TextBlock Text="Geçmiş"/>
+                            </StackPanel>
+                        </Button>
+                    </Border>
+                    <Border CornerRadius="10" Margin="0,0,0,4">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsHabitsPage}" Value="True">
                                         <Setter Property="Background" Value="{DynamicResource NavSelectedBrush}"/>
                                     </DataTrigger>
@@ -160,16 +213,53 @@
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="Transparent"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsContactsPage}" Value="True">
+                                    <DataTrigger Binding="{Binding IsDocumentsPage}" Value="True">
                                         <Setter Property="Background" Value="{DynamicResource NavSelectedBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <Button Style="{StaticResource NavButton}" Command="{Binding GoContactsCommand}">
+                        <Button Style="{StaticResource NavButton}" Command="{Binding GoDocumentsCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE8A5;" FontSize="16" Width="24"/>
+                                <TextBlock Text="Belgeler"/>
+                            </StackPanel>
+                        </Button>
+                    </Border>
+                    <Border CornerRadius="10" Margin="0,0,0,4">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsChatPage}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource NavSelectedBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Button Style="{StaticResource NavButton}" Command="{Binding GoChatCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE8F2;" FontSize="16" Width="24"/>
+                                <TextBlock Text="Sohbet"/>
+                            </StackPanel>
+                        </Button>
+                    </Border>
+                    <Border CornerRadius="10" Margin="0,0,0,4"
+                            Visibility="{Binding ShowOrgNav, Converter={StaticResource BoolToVis}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsOrgPage}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource NavSelectedBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Button Style="{StaticResource NavButton}" Command="{Binding GoOrgCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Text="&#xE716;" FontSize="16" Width="24"/>
-                                <TextBlock Text="Kişiler"/>
+                                <TextBlock Text="Ekip"/>
                             </StackPanel>
                         </Button>
                     </Border>
@@ -207,7 +297,7 @@
                         Command="{Binding OpenSearchCommand}" Margin="0,0,8,0"/>
                 <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Content="+ Ayrıntılı kayıt"
                         Command="{Binding NewDetailedCommand}"
-                        Visibility="{Binding ShowQuickAdd, Converter={StaticResource BoolToVis}}"/>
+                        Visibility="{Binding ShowHeaderNewTask, Converter={StaticResource BoolToVis}}"/>
                 <StackPanel>
                     <TextBlock Text="{Binding HeaderTitle}" Style="{StaticResource TitleText}"/>
                     <TextBlock Text="{Binding HeaderSubtitle}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
@@ -263,14 +353,23 @@
                     <DataTemplate DataType="{x:Type vm:TasksViewModel}">
                         <views:TasksView/>
                     </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:HistoryViewModel}">
+                        <views:HistoryView/>
+                    </DataTemplate>
                     <DataTemplate DataType="{x:Type vm:HabitsViewModel}">
                         <views:HabitsView/>
                     </DataTemplate>
                     <DataTemplate DataType="{x:Type vm:LeavesViewModel}">
                         <views:LeavesView/>
                     </DataTemplate>
-                    <DataTemplate DataType="{x:Type vm:ContactsViewModel}">
-                        <views:ContactsView/>
+                    <DataTemplate DataType="{x:Type vm:DocumentsViewModel}">
+                        <views:DocumentsView/>
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:ChatViewModel}">
+                        <views:ChatView/>
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:OrgWorkViewModel}">
+                        <views:OrgWorkView/>
                     </DataTemplate>
                     <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
                         <views:SettingsView/>

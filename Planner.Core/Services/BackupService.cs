@@ -68,7 +68,13 @@ public sealed class BackupService
                 Payload = Convert.ToBase64String(c.Payload),
                 CreatedAt = c.CreatedAt,
                 UpdatedAt = c.UpdatedAt
-            }).ToList()
+            }).ToList(),
+            Portraits = PortraitStore.ReadAllEncrypted()
+                .Select(p => new VaultPortraitDto
+                {
+                    FileName = p.Name,
+                    Blob = Convert.ToBase64String(p.Blob)
+                }).ToList()
         }, Json);
 
         await File.WriteAllBytesAsync(destPath, Wrap(MagicVault, password, payload), ct);
@@ -113,6 +119,24 @@ public sealed class BackupService
         }
 
         await db.SaveChangesAsync(ct);
+        PortraitStore.DeleteAll();
+        foreach (var portrait in dto.Portraits ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(portrait.FileName) || string.IsNullOrWhiteSpace(portrait.Blob))
+            {
+                continue;
+            }
+
+            try
+            {
+                PortraitStore.WriteEncryptedRaw(portrait.FileName, Convert.FromBase64String(portrait.Blob));
+            }
+            catch
+            {
+                // bozuk dosyayı atla
+            }
+        }
+
         _vault.Lock();
     }
 
@@ -272,6 +296,13 @@ public sealed class BackupService
         public string Verifier { get; set; } = "";
         public int Iterations { get; set; }
         public List<VaultContactDto> Contacts { get; set; } = [];
+        public List<VaultPortraitDto> Portraits { get; set; } = [];
+    }
+
+    private sealed class VaultPortraitDto
+    {
+        public string FileName { get; set; } = "";
+        public string Blob { get; set; } = "";
     }
 
     private sealed class VaultContactDto

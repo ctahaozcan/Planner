@@ -41,6 +41,7 @@ public partial class TasksViewModel : ObservableObject
     {
         SetStatus = SetStatusAsync,
         Edit = EditAsync,
+        Details = ShowDetailsAsync,
         Delete = DeleteAsync,
         Skip = SkipAsync,
         Snooze = SnoozeAsync
@@ -120,6 +121,14 @@ public partial class TasksViewModel : ObservableObject
         if (await _dialogs.EditTaskAsync(card.Id, card.Date, card.OccurrenceDate))
         {
             await LoadAsync();
+        }
+    }
+
+    private async Task ShowDetailsAsync(TaskCardVm card)
+    {
+        if (await _dialogs.ShowTaskDetailsAsync(card.Id, card.OccurrenceDate))
+        {
+            await EditAsync(card);
         }
     }
 

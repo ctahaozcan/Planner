@@ -87,17 +87,23 @@ public sealed class StatusToBrushConverter : IValueConverter
     {
         if (value is not PlannerTaskStatus status)
         {
-            return new SolidColorBrush(Color.FromRgb(100, 116, 139));
+            return ThemeBrush("StatusIdleBrush", Color.FromRgb(100, 116, 139));
         }
 
         return status switch
         {
-            PlannerTaskStatus.Baslamadi => new SolidColorBrush(Color.FromRgb(100, 116, 139)),
-            PlannerTaskStatus.DevamEdiyor => new SolidColorBrush(Color.FromRgb(37, 99, 235)),
-            PlannerTaskStatus.Duraklatildi => new SolidColorBrush(Color.FromRgb(217, 119, 6)),
-            PlannerTaskStatus.Tamamlandi => new SolidColorBrush(Color.FromRgb(5, 150, 105)),
-            _ => new SolidColorBrush(Color.FromRgb(100, 116, 139))
+            PlannerTaskStatus.Baslamadi => ThemeBrush("StatusIdleBrush", Color.FromRgb(100, 116, 139)),
+            PlannerTaskStatus.DevamEdiyor => ThemeBrush("StatusActiveBrush", Color.FromRgb(37, 99, 235)),
+            PlannerTaskStatus.Duraklatildi => ThemeBrush("StatusPausedBrush", Color.FromRgb(217, 119, 6)),
+            PlannerTaskStatus.Tamamlandi => ThemeBrush("StatusDoneBrush", Color.FromRgb(5, 150, 105)),
+            _ => ThemeBrush("StatusIdleBrush", Color.FromRgb(100, 116, 139))
         };
+    }
+
+    private static SolidColorBrush ThemeBrush(string key, Color fallback)
+    {
+        return Application.Current?.TryFindResource(key) as SolidColorBrush
+               ?? new SolidColorBrush(fallback);
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

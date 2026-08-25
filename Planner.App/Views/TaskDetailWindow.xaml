@@ -1,0 +1,80 @@
+<Window x:Class="Planner.App.Views.TaskDetailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Görev ayrıntısı"
+        Height="560" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource AppBgBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <WrapPanel Margin="0,10,0,0">
+                    <Border CornerRadius="8" Padding="8,3" Margin="0,0,8,6" Background="{DynamicResource ChipBgBrush}">
+                        <TextBlock FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{Binding CategoryColor, Converter={StaticResource HexToBrush}}"
+                                   Text="{Binding CategoryName}"/>
+                    </Border>
+                    <Border CornerRadius="8" Padding="8,3" Margin="0,0,8,6" Background="{DynamicResource SurfaceAltBrush}">
+                        <TextBlock FontSize="12" Text="{Binding StatusText}"/>
+                    </Border>
+                    <Border CornerRadius="8" Padding="8,3" Margin="0,0,8,6" Background="{DynamicResource AccentSoftBrush}"
+                            Visibility="{Binding IsRecurring, Converter={StaticResource BoolToVis}}">
+                        <TextBlock FontSize="12" Foreground="{DynamicResource AccentBrush}" Text="{Binding RecurrenceText}"/>
+                    </Border>
+                </WrapPanel>
+
+                <TextBlock Margin="0,14,0,4" Style="{StaticResource MutedText}" Text="Tarih"/>
+                <TextBlock Text="{Binding DateText}" FontWeight="SemiBold"/>
+                <TextBlock Margin="0,10,0,4" Style="{StaticResource MutedText}" Text="Saat"
+                           Visibility="{Binding HasTime, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="{Binding TimeText}" FontWeight="SemiBold"
+                           Visibility="{Binding HasTime, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Margin="0,10,0,4" Style="{StaticResource MutedText}" Text="Anımsatıcı"
+                           Visibility="{Binding HasReminder, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="{Binding ReminderText}"
+                           Visibility="{Binding HasReminder, Converter={StaticResource BoolToVis}}"/>
+
+                <TextBlock Margin="0,14,0,6" Style="{StaticResource MutedText}" Text="Notlar"/>
+                <TextBlock Text="{Binding Notes}" TextWrapping="Wrap"
+                           Visibility="{Binding HasNotes, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="Not yok." Style="{StaticResource MutedText}"
+                           Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisInv}}"/>
+
+                <TextBlock Margin="0,16,0,8" FontWeight="SemiBold" Text="Ekler"/>
+                <TextBlock Text="Bu göreve eklenmiş dosya yok." Style="{StaticResource MutedText}"
+                           Visibility="{Binding HasAttachments, Converter={StaticResource BoolToVisInv}}"/>
+                <ItemsControl ItemsSource="{Binding Attachments}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="12">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Content="Aç"
+                                            Padding="12,6"
+                                            Command="{Binding DataContext.OpenAttachmentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"/>
+                                    <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding OriginalName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock FontSize="11" Style="{StaticResource MutedText}" Margin="0,2,0,0">
+                                            <Run Text="{Binding SizeBytes, Mode=OneWay}"/>
+                                            <Run Text=" bayt"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource SecondaryButton}" Content="Kapat" Command="{Binding CloseCommand}" Margin="0,0,8,0"/>
+            <Button Style="{StaticResource PrimaryButton}" Content="Düzenle" Command="{Binding EditCommand}"/>
+        </StackPanel>
+    </Grid>
+</Window>

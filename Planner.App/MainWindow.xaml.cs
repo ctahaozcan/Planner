@@ -22,7 +22,10 @@ public partial class MainWindow : Window
     private readonly ReminderScheduler _scheduler;
     private readonly TaskService _tasks;
     private readonly IAppDialogs _dialogs;
+    private readonly DocumentService _documents;
+    private readonly DocumentExportService _export;
     private readonly DispatcherTimer _focusUiTimer;
+    private readonly Dictionary<Guid, Window> _documentWindows = new();
     private bool _hotkeyHooked;
 
     public MainWindow(
@@ -32,7 +35,9 @@ public partial class MainWindow : Window
         HotkeyService hotkey,
         ReminderScheduler scheduler,
         TaskService tasks,
-        IAppDialogs dialogs)
+        IAppDialogs dialogs,
+        DocumentService documents,
+        DocumentExportService export)
     {
         InitializeComponent();
         _vm = viewModel;
@@ -42,9 +47,12 @@ public partial class MainWindow : Window
         _scheduler = scheduler;
         _tasks = tasks;
         _dialogs = dialogs;
+        _documents = documents;
+        _export = export;
         DataContext = viewModel;
         viewModel.FocusQuickAddRequested += FocusQuickAdd;
         viewModel.ShowQuickAddPopupRequested += ShowQuickAddPopup;
+        viewModel.Documents.OpenDocumentRequested += OpenDocument;
         viewModel.Settings.HotkeyChanged += () => _ = RegisterHotkeyAsync();
         _hotkey.Activated += () => Dispatcher.Invoke(ShowQuickAddPopup);
         _scheduler.TaskReminderRaised += OnTaskReminder;
@@ -77,8 +85,23 @@ public partial class MainWindow : Window
 
     private async void OnSourceInitialized(object? sender, EventArgs e)
     {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var source = HwndSource.FromHwnd(hwnd);
+        source?.AddHook(WndProc);
         await RegisterHotkeyAsync();
         _hotkeyHooked = true;
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int wmQueryEndSession = 0x0011;
+        const int wmEndSession = 0x0016;
+        if (msg is wmQueryEndSession or wmEndSession)
+        {
+            _tray.RequestExit();
+        }
+
+        return IntPtr.Zero;
     }
 
     private async Task RegisterHotkeyAsync()
@@ -158,6 +181,55 @@ public partial class MainWindow : Window
         win.Show();
     }
 
+    private void OpenDocument(WorkspaceDocument document)
+    {
+        if (_documentWindows.TryGetValue(document.Id, out var existing))
+        {
+            if (existing.WindowState == WindowState.Minimized)
+            {
+                existing.WindowState = WindowState.Normal;
+            }
+
+            existing.Show();
+            existing.Activate();
+            return;
+        }
+
+        try
+        {
+            Window window;
+            if (document.Kind == WorkspaceDocumentKind.Table)
+            {
+                var vm = new TableDocumentViewModel(document.Id, _documents, _export, _dialogs);
+                window = new TableDocumentWindow(vm, _dialogs);
+            }
+            else
+            {
+                var vm = new TextDocumentViewModel(document.Id, _documents, _export, _dialogs);
+                window = new TextDocumentWindow(vm);
+            }
+
+            window.ShowInTaskbar = true;
+            window.ResizeMode = ResizeMode.CanResize;
+            window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            _documentWindows[document.Id] = window;
+            window.Closed += async (_, _) =>
+            {
+                _documentWindows.Remove(document.Id);
+                if (_vm.CurrentPage == AppPage.Documents)
+                {
+                    await _vm.Documents.LoadAsync();
+                }
+            };
+            window.Show();
+            window.Activate();
+        }
+        catch (Exception ex)
+        {
+            _dialogs.Info("Belge açılamadı: " + ex.Message, "Belgeler");
+        }
+    }
+
     protected override async void OnClosing(CancelEventArgs e)
     {
         if (_tray.ExitRequested)
@@ -173,6 +245,7 @@ public partial class MainWindow : Window
 
         e.Cancel = true;
         var shown = await _settings.GetBoolAsync(SettingKeys.TrayTipShown);
+        await _vm.ResetToHomeAsync();
         _tray.HideToTray(!shown);
         if (!shown)
         {

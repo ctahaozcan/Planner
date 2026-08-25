@@ -96,6 +96,7 @@ public sealed class VaultService
             if (record is not null)
             {
                 record.Id = row.Id;
+                record.SocialAccounts ??= [];
                 list.Add(record);
             }
         }
@@ -124,6 +125,7 @@ public sealed class VaultService
             CreatedAt = contact.CreatedAt,
             UpdatedAt = DateTime.Now
         });
+        WriteEncryptedSocials(db, contact, key);
         await db.SaveChangesAsync(ct);
     }
 
@@ -139,6 +141,7 @@ public sealed class VaultService
                   ?? throw new InvalidOperationException("Kişi bulunamadı.");
         row.Payload = payload;
         row.UpdatedAt = DateTime.Now;
+        WriteEncryptedSocials(db, contact, key);
         await db.SaveChangesAsync(ct);
     }
 
@@ -153,7 +156,9 @@ public sealed class VaultService
         }
 
         db.Contacts.Remove(row);
+        db.SocialAccounts.RemoveRange(await db.SocialAccounts.Where(s => s.ContactId == id).ToListAsync());
         await db.SaveChangesAsync();
+        PortraitStore.DeleteForPerson(id);
     }
 
     public async Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct = default)
@@ -183,9 +188,15 @@ public sealed class VaultService
                 Encoding.UTF8.GetBytes(JsonSerializer.Serialize(contact, JsonOptions)),
                 newKey);
             row.UpdatedAt = DateTime.Now;
+            WriteEncryptedSocials(db, contact, newKey);
         }
 
         await db.SaveChangesAsync(ct);
+        if (_key is not null)
+        {
+            PortraitStore.ReencryptAll(_key, newKey);
+        }
+
         Lock();
         _key = newKey;
     }
@@ -193,10 +204,88 @@ public sealed class VaultService
     public async Task ResetVaultAsync(CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
+        db.SocialAccounts.RemoveRange(await db.SocialAccounts.ToListAsync(ct));
         db.Contacts.RemoveRange(await db.Contacts.ToListAsync(ct));
         db.Vault.RemoveRange(await db.Vault.ToListAsync(ct));
         await db.SaveChangesAsync(ct);
+        PortraitStore.DeleteAll();
         Lock();
+    }
+
+    public void SavePortrait(Guid personId, byte[] original, byte[] thumbnail)
+    {
+        var key = RequireKey();
+        if (original.Length > PortraitStore.MaxBytes)
+        {
+            throw new InvalidOperationException("Fotoğraf 5 MB sınırını aşıyor.");
+        }
+
+        PortraitStore.WriteEncrypted(PortraitStore.OriginalName(personId), original, key);
+        PortraitStore.WriteEncrypted(PortraitStore.ThumbName(personId), thumbnail, key);
+    }
+
+    public byte[]? TryLoadThumbnail(Guid personId)
+    {
+        if (_key is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return PortraitStore.ReadDecrypted(PortraitStore.ThumbName(personId), _key);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public byte[]? TryLoadOriginal(Guid personId)
+    {
+        if (_key is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return PortraitStore.ReadDecrypted(PortraitStore.OriginalName(personId), _key)
+                   ?? PortraitStore.ReadDecrypted(PortraitStore.ThumbName(personId), _key);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void DeletePortrait(Guid personId) => PortraitStore.DeleteForPerson(personId);
+
+    private static void WriteEncryptedSocials(PlannerDbContext db, ContactRecord contact, byte[] key)
+    {
+        var existing = db.SocialAccounts.Where(s => s.ContactId == contact.Id).ToList();
+        db.SocialAccounts.RemoveRange(existing);
+        foreach (var account in contact.SocialAccounts ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(account.Value))
+            {
+                continue;
+            }
+
+            if (account.Id == Guid.Empty)
+            {
+                account.Id = Guid.NewGuid();
+            }
+
+            db.SocialAccounts.Add(new EncryptedSocialAccount
+            {
+                Id = Guid.NewGuid(),
+                ContactId = contact.Id,
+                Payload = EncryptionService.Encrypt(
+                    Encoding.UTF8.GetBytes(JsonSerializer.Serialize(account, JsonOptions)),
+                    key)
+            });
+        }
     }
 
     private byte[] RequireKey()

@@ -11,15 +11,30 @@ public sealed class LeaveService
     private readonly IDbContextFactory<PlannerDbContext> _factory;
     private readonly ITaskChangeSignal _signal;
     private readonly SettingsService _settings;
+    private readonly UserAccountService _users;
 
     public LeaveService(
         IDbContextFactory<PlannerDbContext> factory,
         ITaskChangeSignal signal,
-        SettingsService settings)
+        SettingsService settings,
+        UserAccountService users)
     {
         _factory = factory;
         _signal = signal;
         _settings = settings;
+        _users = users;
+    }
+
+    private Guid? Me => _users.Current?.Id;
+
+    private static IQueryable<LeaveRecord> OwnedBy(IQueryable<LeaveRecord> query, Guid? owner)
+    {
+        if (owner is null)
+        {
+            return query;
+        }
+
+        return query.Where(r => r.OwnerUserId == null || r.OwnerUserId == owner);
     }
 
     public async Task<IReadOnlyList<LeaveType>> GetTypesAsync(CancellationToken ct = default)
@@ -84,7 +99,7 @@ public sealed class LeaveService
     public async Task<IReadOnlyList<LeaveRecord>> GetAllAsync(CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        return await db.LeaveRecords.AsNoTracking()
+        return await OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
             .OrderByDescending(r => r.StartDate)
             .ThenByDescending(r => r.CreatedAt)
@@ -94,9 +109,9 @@ public sealed class LeaveService
     public async Task<IReadOnlyList<LeaveRecord>> GetForDateAsync(DateOnly date, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        return await db.LeaveRecords.AsNoTracking()
+        return await OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
-            .Where(r => r.Status != LeaveStatus.Iptal && r.StartDate <= date && r.EndDate >= date)
+            .Where(r => r.Status != LeaveStatus.Iptal && r.Status != LeaveStatus.Reddedildi && r.StartDate <= date && r.EndDate >= date)
             .OrderBy(r => r.StartDate)
             .ToListAsync(ct);
     }
@@ -104,9 +119,9 @@ public sealed class LeaveService
     public async Task<IReadOnlyList<LeaveRecord>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        return await db.LeaveRecords.AsNoTracking()
+        return await OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
-            .Where(r => r.Status != LeaveStatus.Iptal && r.StartDate <= to && r.EndDate >= from)
+            .Where(r => r.Status != LeaveStatus.Iptal && r.Status != LeaveStatus.Reddedildi && r.StartDate <= to && r.EndDate >= from)
             .OrderBy(r => r.StartDate)
             .ToListAsync(ct);
     }
@@ -118,9 +133,9 @@ public sealed class LeaveService
         CancellationToken ct = default)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var query = db.LeaveRecords.AsNoTracking()
+        var query = OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
-            .Where(r => r.Status != LeaveStatus.Iptal && r.StartDate <= end && r.EndDate >= start);
+            .Where(r => r.Status != LeaveStatus.Iptal && r.Status != LeaveStatus.Reddedildi && r.StartDate <= end && r.EndDate >= start);
         if (excludeId is { } id)
         {
             query = query.Where(r => r.Id != id);
@@ -192,6 +207,8 @@ public sealed class LeaveService
             : draft.EndHalf;
         entity.Note = string.IsNullOrWhiteSpace(draft.Note) ? null : draft.Note.Trim();
         entity.Status = draft.Status;
+        entity.OwnerUserId = draft.OwnerUserId ?? entity.OwnerUserId ?? Me;
+        entity.ServerLeaveId = draft.ServerLeaveId ?? entity.ServerLeaveId;
         entity.UpdatedAt = DateTime.Now;
         var ctx = await GetCountContextAsync(ct);
         entity.DurationMinutes = LeaveMath.CountMinutes(entity, ctx);
@@ -244,13 +261,13 @@ public sealed class LeaveService
     {
         var date = asOf ?? DateOnly.FromDateTime(DateTime.Today);
         var month = await _settings.GetIntAsync(SettingKeys.LeaveYearStartMonth, 1);
-        var entitlement = await GetDecimalSettingAsync(SettingKeys.LeaveAnnualAllowance, 14m);
+        var entitlement = await GetDecimalSettingAsync(SettingKeys.LeaveAnnualAllowance, 0m);
         var carry = await GetDecimalSettingAsync(SettingKeys.LeaveCarryOver, 0m);
         var ctx = await GetCountContextAsync(ct);
         var (periodStart, periodEnd) = LeaveMath.PeriodFor(date, month);
 
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var records = await db.LeaveRecords.AsNoTracking()
+        var records = await OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
             .Where(r => r.Type.CountsAgainstAnnual
                         && (r.Status == LeaveStatus.Onaylandi || r.Status == LeaveStatus.Kullanildi)
@@ -277,8 +294,9 @@ public sealed class LeaveService
     public async Task<CompensatoryBalance> GetCompensatoryBalanceAsync(CancellationToken ct = default)
     {
         var ctx = await GetCountContextAsync(ct);
+        var opening = await GetOpeningMinutesAsync(ct);
         await using var db = await _factory.CreateDbContextAsync(ct);
-        var records = await db.LeaveRecords.AsNoTracking()
+        var records = await OwnedBy(db.LeaveRecords.AsNoTracking(), Me)
             .Include(r => r.Type)
             .Where(r => r.Status == LeaveStatus.Onaylandi || r.Status == LeaveStatus.Kullanildi)
             .ToListAsync(ct);
@@ -301,10 +319,25 @@ public sealed class LeaveService
         return new CompensatoryBalance
         {
             WorkdayHours = ctx.WorkdayHours,
+            OpeningMinutes = opening,
             DebitMinutes = debit,
             CreditMinutes = credit,
-            NetMinutes = credit - debit
+            NetMinutes = opening + credit - debit
         };
+    }
+
+    public async Task<int> GetOpeningMinutesAsync(CancellationToken ct = default)
+    {
+        _ = ct;
+        var raw = await _settings.GetAsync(SettingKeys.LeaveCompensatoryOpeningMinutes, "0");
+        return int.TryParse(raw, NumberStyles.Integer, Invariant, out var value) ? value : 0;
+    }
+
+    public async Task SaveOpeningMinutesAsync(int minutes, CancellationToken ct = default)
+    {
+        _ = ct;
+        await _settings.SetAsync(SettingKeys.LeaveCompensatoryOpeningMinutes, minutes.ToString(Invariant));
+        _signal.NotifyChanged();
     }
 
     public async Task SaveBalanceSettingsAsync(
@@ -327,6 +360,63 @@ public sealed class LeaveService
         await _settings.SetAsync(SettingKeys.LeaveCarryOver, Math.Max(0, carryOver).ToString("0.##", Invariant));
         await _settings.SetBoolAsync(SettingKeys.LeaveCountWeekends, countWeekends);
         await _settings.SetAsync(SettingKeys.LeaveWorkdayHours, workdayHours.ToString("0.##", Invariant));
+        _signal.NotifyChanged();
+    }
+
+    public static LeaveStatus MapServerStatus(string? status) => (status ?? "").Trim().ToLowerInvariant() switch
+    {
+        "approved" => LeaveStatus.Onaylandi,
+        "rejected" => LeaveStatus.Reddedildi,
+        "used" => LeaveStatus.Kullanildi,
+        _ => LeaveStatus.Planlandi
+    };
+
+    public async Task ApplyRemoteAsync(
+        Guid serverId,
+        Guid? clientId,
+        Guid typeId,
+        LeaveEntryKind entryKind,
+        LeaveDurationKind durationKind,
+        DateOnly start,
+        DateOnly end,
+        TimeOnly? startTime,
+        TimeOnly? endTime,
+        string? note,
+        LeaveStatus status,
+        int durationMinutes,
+        CancellationToken ct = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        var entity = await db.LeaveRecords.FirstOrDefaultAsync(r => r.ServerLeaveId == serverId, ct);
+        if (entity is null && clientId is Guid localId)
+        {
+            entity = await db.LeaveRecords.FirstOrDefaultAsync(r => r.Id == localId, ct);
+        }
+
+        if (entity is null)
+        {
+            entity = new LeaveRecord
+            {
+                Id = clientId is Guid cid && cid != Guid.Empty ? cid : Guid.NewGuid(),
+                CreatedAt = DateTime.Now
+            };
+            db.LeaveRecords.Add(entity);
+        }
+
+        entity.TypeId = typeId;
+        entity.EntryKind = entryKind;
+        entity.DurationKind = durationKind;
+        entity.StartDate = start;
+        entity.EndDate = end;
+        entity.StartTime = startTime;
+        entity.EndTime = endTime;
+        entity.Note = string.IsNullOrWhiteSpace(note) ? entity.Note : note.Trim();
+        entity.Status = status;
+        entity.DurationMinutes = durationMinutes;
+        entity.OwnerUserId = Me ?? entity.OwnerUserId;
+        entity.ServerLeaveId = serverId;
+        entity.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync(ct);
         _signal.NotifyChanged();
     }
 

@@ -1,9 +1,13 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.2.0"
+  #define MyAppVersion "1.9.2"
 #endif
 #define MyAppName "Yaver"
 #define MyAppExeName "Yaver.exe"
 #define MyAppPublisher "Yaver"
+; Single-instance mutex created by Yaver.exe (also --min tray). Not used as a
+; blocking AppMutex: closing the window does not release it. [Code] detects
+; Local\Yaver.SingleInstance and stops the process before file copy.
+#define MyAppMutex "Local\Yaver.SingleInstance"
 
 [Setup]
 AppId={{C4E8A1B7-3F29-4D6C-9E12-7A5B8C0D1F34}
@@ -31,9 +35,10 @@ WizardStyle=modern
 SetupIconFile=..\Planner.App\Assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
+SetupLogging=yes
 CloseApplications=yes
-CloseApplicationsFilter=Yaver.exe;Planlayici.exe
-RestartApplications=no
+CloseApplicationsFilter=Yaver.exe,Planlayici.exe,*.dll
+RestartApplications=yes
 UsePreviousAppDir=no
 UsePreviousTasks=yes
 
@@ -45,7 +50,7 @@ Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; GroupDescript
 Name: "startup"; Description: "Windows oturum açıldığında başlat"; GroupDescription: "Ek görevler:"; Flags: unchecked
 
 [Files]
-Source: "..\dist\Yaver\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\Yaver\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace uninsrestartdelete
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
@@ -66,3 +71,88 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} uygulamasını ba�
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+
+[UninstallRun]
+Filename: "{sys}\taskkill.exe"; Parameters: "/IM Yaver.exe /F /T"; Flags: runhidden; RunOnceId: "StopYaver"
+Filename: "{sys}\taskkill.exe"; Parameters: "/IM Planlayici.exe /F /T"; Flags: runhidden; RunOnceId: "StopPlanlayici"
+
+[Code]
+function StopImage(const ImageName: String): Integer;
+var
+  ResultCode: Integer;
+begin
+  ResultCode := 0;
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM ' + ImageName + ' /F /T',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ResultCode;
+end;
+
+procedure RequestCleanShutdownAt(const ExePath: String);
+var
+  ResultCode: Integer;
+begin
+  if (ExePath <> '') and FileExists(ExePath) then
+    Exec(ExePath, '--shutdown', '', SW_HIDE, ewNoWait, ResultCode);
+end;
+
+function AppStillRunning: Boolean;
+begin
+  Result := CheckForMutexes('{#MyAppMutex}') or
+            CheckForMutexes('Local\Planlayici.SingleInstance');
+end;
+
+function StopRunningApps: Boolean;
+var
+  I: Integer;
+begin
+  { app constant is not ready in InitializeSetup; use the per-user install path. }
+  RequestCleanShutdownAt(ExpandConstant('{localappdata}\Programs\Yaver\{#MyAppExeName}'));
+  RequestCleanShutdownAt(ExpandConstant('{localappdata}\Programs\Planlayici\Planlayici.exe'));
+  Sleep(700);
+  StopImage('Yaver.exe');
+  StopImage('Planlayici.exe');
+
+  for I := 1 to 24 do
+  begin
+    if not AppStillRunning then
+    begin
+      Sleep(400);
+      Result := True;
+      Exit;
+    end;
+    if (I = 6) or (I = 14) then
+    begin
+      StopImage('Yaver.exe');
+      StopImage('Planlayici.exe');
+    end;
+    Sleep(250);
+  end;
+
+  Result := True;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  StopRunningApps();
+  Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  RequestCleanShutdownAt(ExpandConstant('{app}\{#MyAppExeName}'));
+  StopRunningApps();
+  Result := '';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    StopRunningApps();
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    StopRunningApps();
+end;

@@ -18,15 +18,22 @@ public partial class MainViewModel : ObservableObject
     private readonly FocusTimerService _focus;
     private readonly SettingsService _settings;
     private readonly BriefingService _briefingService;
+    private readonly TaskRolloverService _rollover;
+    private readonly IReminderNotifier _notifier;
+    private readonly ThemeService _theme;
+    private readonly UserAccountService _users;
 
     public MainViewModel(
         TodayViewModel today,
         AgendaViewModel agenda,
         WeekViewModel week,
         TasksViewModel tasksView,
+        HistoryViewModel history,
         HabitsViewModel habits,
         LeavesViewModel leaves,
-        ContactsViewModel contacts,
+        DocumentsViewModel documents,
+        ChatViewModel chat,
+        OrgWorkViewModel org,
         SettingsViewModel settingsVm,
         TaskService tasks,
         CategoryService categories,
@@ -35,15 +42,22 @@ public partial class MainViewModel : ObservableObject
         SearchService search,
         FocusTimerService focus,
         SettingsService settings,
-        BriefingService briefing)
+        BriefingService briefing,
+        TaskRolloverService rollover,
+        IReminderNotifier notifier,
+        ThemeService theme,
+        UserAccountService users)
     {
         Today = today;
         Agenda = agenda;
         Week = week;
         Tasks = tasksView;
+        History = history;
         Habits = habits;
         Leaves = leaves;
-        Contacts = contacts;
+        Documents = documents;
+        Chat = chat;
+        Org = org;
         Settings = settingsVm;
         _tasks = tasks;
         _categories = categories;
@@ -53,20 +67,30 @@ public partial class MainViewModel : ObservableObject
         _focus = focus;
         _settings = settings;
         _briefingService = briefing;
+        _rollover = rollover;
+        _notifier = notifier;
+        _theme = theme;
+        _users = users;
         CurrentView = today;
         CurrentPage = AppPage.Today;
         Week.OpenDayRequested += d => _ = OpenDayAsync(d);
-        Contacts.VaultUnlocked += () => _ = OnVaultUnlockedAsync();
+        Settings.UserSwitched += RefreshCurrentUser;
         _focus.Changed += RefreshFocusUi;
+        _rollover.Applied += OnOverdueRolled;
+        ThemeService.Changed += (_, _) => RefreshThemeFlags();
+        RefreshThemeFlags();
     }
 
     public TodayViewModel Today { get; }
     public AgendaViewModel Agenda { get; }
     public WeekViewModel Week { get; }
     public TasksViewModel Tasks { get; }
+    public HistoryViewModel History { get; }
     public HabitsViewModel Habits { get; }
     public LeavesViewModel Leaves { get; }
-    public ContactsViewModel Contacts { get; }
+    public DocumentsViewModel Documents { get; }
+    public ChatViewModel Chat { get; }
+    public OrgWorkViewModel Org { get; }
     public SettingsViewModel Settings { get; }
 
     [ObservableProperty] private AppPage _currentPage;
@@ -76,6 +100,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _headerTitle = "Bugün";
     [ObservableProperty] private string _headerSubtitle = "";
     [ObservableProperty] private bool _showQuickAdd = true;
+    [ObservableProperty] private bool _showHeaderNewTask;
     [ObservableProperty] private bool _searchOpen;
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private string _focusText = "Odak";
@@ -83,6 +108,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _focusPhaseText = "";
     [ObservableProperty] private BriefingContent? _briefing;
     [ObservableProperty] private bool _showBriefingBanner;
+    [ObservableProperty] private bool _isDarkTheme;
+    [ObservableProperty] private bool _isLightTheme = true;
+    [ObservableProperty] private string _currentUserName = "Ben";
 
     public ObservableCollection<SearchHit> SearchResults { get; } = new();
 
@@ -93,17 +121,32 @@ public partial class MainViewModel : ObservableObject
     public bool IsAgendaPage => CurrentPage == AppPage.Agenda;
     public bool IsWeekPage => CurrentPage == AppPage.Week;
     public bool IsTasksPage => CurrentPage == AppPage.Tasks;
+    public bool IsHistoryPage => CurrentPage == AppPage.History;
     public bool IsHabitsPage => CurrentPage == AppPage.Habits;
     public bool IsLeavesPage => CurrentPage == AppPage.Leaves;
-    public bool IsContactsPage => CurrentPage == AppPage.Contacts;
+    public bool IsDocumentsPage => CurrentPage == AppPage.Documents;
+    public bool IsChatPage => CurrentPage == AppPage.Chat;
+    public bool IsOrgPage => CurrentPage == AppPage.Org;
     public bool IsSettingsPage => CurrentPage == AppPage.Settings;
+    public bool ShowOrgNav => _users.UsesWork;
 
     public async Task InitializeAsync()
     {
-        await Today.LoadAsync();
-        UpdateHeader();
+        await _settings.RemoveAsync(SettingKeys.LastPage);
+        CurrentUserName = _users.CurrentName;
+        OnPropertyChanged(nameof(ShowOrgNav));
+        await ResetToHomeAsync();
         RefreshFocusUi();
         await _tray.RefreshTooltipAsync();
+    }
+
+    public async Task ResetToHomeAsync()
+    {
+        await _rollover.ApplyAsync();
+        CurrentPage = AppPage.Today;
+        CurrentView = Today;
+        await Today.LoadAsync();
+        UpdateHeader();
     }
 
     public async Task ShowMorningBriefingIfNeededAsync(bool fromTray)
@@ -139,11 +182,15 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAgendaPage));
         OnPropertyChanged(nameof(IsWeekPage));
         OnPropertyChanged(nameof(IsTasksPage));
+        OnPropertyChanged(nameof(IsHistoryPage));
         OnPropertyChanged(nameof(IsHabitsPage));
         OnPropertyChanged(nameof(IsLeavesPage));
-        OnPropertyChanged(nameof(IsContactsPage));
+        OnPropertyChanged(nameof(IsDocumentsPage));
+        OnPropertyChanged(nameof(IsChatPage));
+        OnPropertyChanged(nameof(IsOrgPage));
         OnPropertyChanged(nameof(IsSettingsPage));
         ShowQuickAdd = value is AppPage.Today or AppPage.Agenda or AppPage.Week or AppPage.Tasks;
+        ShowHeaderNewTask = value is AppPage.Agenda or AppPage.Week or AppPage.Tasks;
         UpdateHeader();
     }
 
@@ -163,10 +210,40 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] private async Task GoAgendaAsync() { CurrentPage = AppPage.Agenda; CurrentView = Agenda; await Agenda.LoadAsync(); }
     [RelayCommand] private async Task GoWeekAsync() { CurrentPage = AppPage.Week; CurrentView = Week; await Week.LoadAsync(); }
     [RelayCommand] private async Task GoTasksAsync() { CurrentPage = AppPage.Tasks; CurrentView = Tasks; await Tasks.LoadAsync(); }
+    [RelayCommand] private async Task GoHistoryAsync() { CurrentPage = AppPage.History; CurrentView = History; await History.LoadAsync(); }
     [RelayCommand] private async Task GoHabitsAsync() { CurrentPage = AppPage.Habits; CurrentView = Habits; await Habits.LoadAsync(); }
     [RelayCommand] private async Task GoLeavesAsync() { CurrentPage = AppPage.Leaves; CurrentView = Leaves; await Leaves.LoadAsync(); }
-    [RelayCommand] private async Task GoContactsAsync() { CurrentPage = AppPage.Contacts; CurrentView = Contacts; await Contacts.LoadAsync(); }
+    [RelayCommand] private async Task GoDocumentsAsync() { CurrentPage = AppPage.Documents; CurrentView = Documents; await Documents.LoadAsync(); }
+    [RelayCommand] private async Task GoChatAsync() { CurrentPage = AppPage.Chat; CurrentView = Chat; await Chat.LoadAsync(); }
+    [RelayCommand] private async Task GoOrgAsync() { CurrentPage = AppPage.Org; CurrentView = Org; await Org.LoadAsync(); }
     [RelayCommand] private async Task GoSettingsAsync() { CurrentPage = AppPage.Settings; CurrentView = Settings; await Settings.LoadAsync(); }
+
+    public async Task OpenChatAsync() => await GoChatAsync();
+
+    public void RefreshCurrentUser()
+    {
+        CurrentUserName = _users.CurrentName;
+        OnPropertyChanged(nameof(ShowOrgNav));
+    }
+
+    [RelayCommand]
+    private async Task SetLightThemeAsync() => await ApplySidebarThemeAsync("Light");
+
+    [RelayCommand]
+    private async Task SetDarkThemeAsync() => await ApplySidebarThemeAsync("Dark");
+
+    private async Task ApplySidebarThemeAsync(string key)
+    {
+        await _settings.SetAsync(SettingKeys.Theme, key);
+        _theme.Apply(key);
+        Settings.SyncTheme(key);
+    }
+
+    private void RefreshThemeFlags()
+    {
+        IsDarkTheme = _theme.IsDark;
+        IsLightTheme = !_theme.IsDark;
+    }
 
     public async Task OpenDayAsync(DateOnly date)
     {
@@ -301,8 +378,8 @@ public partial class MainViewModel : ObservableObject
             case SearchKind.Leave:
                 await GoLeavesAsync();
                 break;
-            case SearchKind.Contact:
-                await GoContactsAsync();
+            case SearchKind.Document:
+                await GoDocumentsAsync();
                 break;
             case SearchKind.Category:
                 await GoTasksAsync();
@@ -383,9 +460,12 @@ public partial class MainViewModel : ObservableObject
             case AppPage.Agenda: await Agenda.LoadAsync(); break;
             case AppPage.Week: await Week.LoadAsync(); break;
             case AppPage.Tasks: await Tasks.LoadAsync(); break;
+            case AppPage.History: await History.LoadAsync(); break;
             case AppPage.Habits: await Habits.LoadAsync(); break;
             case AppPage.Leaves: await Leaves.LoadAsync(); break;
-            case AppPage.Contacts: await Contacts.LoadAsync(); break;
+            case AppPage.Documents: await Documents.LoadAsync(); break;
+            case AppPage.Chat: await Chat.LoadAsync(); break;
+            case AppPage.Org: await Org.LoadAsync(); break;
             case AppPage.Settings: await Settings.LoadAsync(); break;
         }
 
@@ -393,17 +473,21 @@ public partial class MainViewModel : ObservableObject
         await _tray.RefreshTooltipAsync();
     }
 
-    private async Task OnVaultUnlockedAsync()
+    private void OnOverdueRolled(int count)
     {
-        await Today.LoadAsync();
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var events = await _briefingService.GetContactEventsAsync(today);
-        if (events.Count > 0 && await _settings.GetDateAsync(SettingKeys.LastBirthdayNotifyDate) != today)
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            await _settings.SetDateAsync(SettingKeys.LastBirthdayNotifyDate, today);
-            Briefing = await _briefingService.BuildAsync(today);
-            ShowBriefingBanner = true;
+            dispatcher.Invoke(() => OnOverdueRolled(count));
+            return;
         }
+
+        if (count > 0)
+        {
+            _notifier.ShowInfo("Yaver", $"{count} tamamlanmayan görev bugüne alındı");
+        }
+
+        _ = RefreshCurrentAsync();
     }
 
     private void UpdateHeader()
@@ -415,10 +499,13 @@ public partial class MainViewModel : ObservableObject
             AppPage.Agenda => ("Ajanda", "Önümüzdeki 14 gün — iş, kişisel ve özel durumlar"),
             AppPage.Week => ("Hafta", Week.RangeLabel),
             AppPage.Tasks => ("Görevler", "Tüm kayıtlar, durum ve kategori süzgeçleri"),
+            AppPage.History => ("Geçmiş", "Tamamlanan işler — süre Devam Ediyor toplamıdır"),
             AppPage.Habits => ("Alışkanlıklar", "Günlük / hafta içi işaretler ve seri"),
             AppPage.Leaves => ("İzinler", "İzin, telafili izin, telafi ve bakiyeler"),
-            AppPage.Contacts => ("Kişiler", "Şifreli kasa — telefon kaybında başvuru defteri"),
-            AppPage.Settings => ("Ayarlar", "Tema, kısayol, sessiz saat, yedekleme"),
+            AppPage.Documents => ("Belgeler", "Drive gibi belge ve e-tablo — Word, Excel, PDF indir"),
+            AppPage.Chat => ("Sohbet", "Kullanıcı adı ile ara, arkadaş ekle, mesaj ve arama"),
+            AppPage.Org => ("Ekip", "Bir altınıza görev verin; altınızdakilerin işini görün"),
+            AppPage.Settings => ("Ayarlar", "Tema, kullanıcılar, kısayol, sessiz saat, yedekleme"),
             _ => ("Yaver", "")
         };
     }

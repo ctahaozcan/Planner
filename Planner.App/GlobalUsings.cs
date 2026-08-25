@@ -7,3 +7,16 @@ global using MessageBox = System.Windows.MessageBox;
 global using MessageBoxButton = System.Windows.MessageBoxButton;
 global using MessageBoxImage = System.Windows.MessageBoxImage;
 global using MessageBoxResult = System.Windows.MessageBoxResult;
+global using Button = System.Windows.Controls.Button;
+global using MenuItem = System.Windows.Controls.MenuItem;
+global using ContextMenu = System.Windows.Controls.ContextMenu;
+global using TextBox = System.Windows.Controls.TextBox;
+global using Image = System.Windows.Controls.Image;
+global using Binding = System.Windows.Data.Binding;
+global using FontFamily = System.Windows.Media.FontFamily;
+global using Brush = System.Windows.Media.Brush;
+global using Brushes = System.Windows.Media.Brushes;
+global using Style = System.Windows.Style;
+global using HorizontalAlignment = System.Windows.HorizontalAlignment;
+global using DataFormats = System.Windows.DataFormats;
+

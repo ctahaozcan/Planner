@@ -10,9 +10,12 @@ public enum AppPage
     Agenda,
     Week,
     Tasks,
+    History,
     Habits,
     Leaves,
-    Contacts,
+    Documents,
+    Chat,
+    Org,
     Settings
 }
 
@@ -20,6 +23,7 @@ public sealed class TaskCardCallbacks
 {
     public required Func<TaskCardVm, PlannerTaskStatus, Task> SetStatus { get; init; }
     public required Func<TaskCardVm, Task> Edit { get; init; }
+    public Func<TaskCardVm, Task>? Details { get; init; }
     public required Func<TaskCardVm, Task> Delete { get; init; }
     public Func<TaskCardVm, Task>? Pin { get; init; }
     public Func<TaskCardVm, Task>? Skip { get; init; }
@@ -60,6 +64,8 @@ public partial class TaskCardVm : ObservableObject
         RecurrenceText = task.IsRecurring ? task.RecurrenceKind.ToDisplay() : "";
         IsPriority = isPriority;
         OccurrenceDate = occurrence.Date;
+        SortOrder = task.SortOrder;
+        ShortId = "#" + task.Id.ToString("N")[..6].ToUpperInvariant();
         CanSkip = task.IsRecurring;
         CanPin = callbacks.Pin is not null;
         CanSnooze = callbacks.Snooze is not null && HasReminder;
@@ -68,6 +74,8 @@ public partial class TaskCardVm : ObservableObject
     public Guid Id { get; }
     public DateOnly Date { get; }
     public DateOnly OccurrenceDate { get; }
+    public int SortOrder { get; set; }
+    public string ShortId { get; }
 
     [ObservableProperty] private string _title = "";
     [ObservableProperty] private string? _notes;
@@ -114,6 +122,9 @@ public partial class TaskCardVm : ObservableObject
 
     [RelayCommand]
     private Task EditAsync() => _cb.Edit(this);
+
+    [RelayCommand]
+    private Task DetailsAsync() => _cb.Details?.Invoke(this) ?? _cb.Edit(this);
 
     [RelayCommand]
     private Task DeleteAsync() => _cb.Delete(this);

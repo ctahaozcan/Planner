@@ -3,6 +3,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Planner.App.Services;
+using Planner.Chat;
 using Planner.Core.Models;
 using Planner.Core.Services;
 
@@ -29,7 +30,9 @@ public sealed class LeaveBannerVm
             LeaveMath.FormatDateTimeRange(leave),
             kind.ToDisplay(),
             leave.Status.ToDisplay(),
-            LeaveMath.FormatMinutes(minutes, ctx.WorkdayHours)
+            LeaveMath.IsLedgerKind(kind)
+                ? LeaveMath.FormatHoursMinutes(minutes)
+                : LeaveMath.FormatMinutes(minutes, ctx.WorkdayHours)
         };
         if (!string.IsNullOrEmpty(half) && leave.DurationKind != LeaveDurationKind.Hourly && !LeaveMath.IsLedgerKind(kind))
         {
@@ -71,7 +74,10 @@ public sealed class LeaveRowVm
         ColorHex = record.Type?.ColorHex ?? "#0F766E";
         DateText = LeaveMath.FormatDateTimeRange(record);
         var extra = LeaveMath.HalfSummary(record);
-        var duration = LeaveMath.FormatMinutes(LeaveMath.CountMinutes(record, ctx), ctx.WorkdayHours);
+        var counted = LeaveMath.CountMinutes(record, ctx);
+        var duration = LeaveMath.IsLedgerKind(kind)
+            ? LeaveMath.FormatHoursMinutes(counted)
+            : LeaveMath.FormatMinutes(counted, ctx.WorkdayHours);
         var unit = kind == LeaveEntryKind.Leave ? record.DurationKind.ToDisplay() : "Dakika dakika";
         DaysText = string.IsNullOrEmpty(extra)
             ? $"{unit} · {duration}"
@@ -79,13 +85,13 @@ public sealed class LeaveRowVm
         if (kind == LeaveEntryKind.TelafiliIzin)
         {
             LedgerText = record.Status.AffectsBalance()
-                ? LeaveMath.FormatLedgerMinutes(-LeaveMath.CountMinutes(record, ctx), ctx.WorkdayHours)
+                ? LeaveMath.FormatLedgerMinutes(-LeaveMath.CountMinutes(record, ctx))
                 : "bakiyeye yansımaz";
         }
         else if (kind == LeaveEntryKind.Telafi)
         {
             LedgerText = record.Status.AffectsBalance()
-                ? LeaveMath.FormatLedgerMinutes(LeaveMath.CountMinutes(record, ctx), ctx.WorkdayHours)
+                ? LeaveMath.FormatLedgerMinutes(LeaveMath.CountMinutes(record, ctx))
                 : "bakiyeye yansımaz";
         }
         else
@@ -142,15 +148,19 @@ public partial class LeavesViewModel : ObservableObject
     private static readonly CultureInfo Tr = new("tr-TR");
     private readonly LeaveService _leaves;
     private readonly IAppDialogs _dialogs;
+    private readonly ServerChatClient _server;
+    private readonly UserAccountService _users;
     private bool _loading;
     private IReadOnlyList<LeaveRecord> _allRecords = [];
     private LeaveCountContext _ctx = new();
     private LeaveListFilter _filter = LeaveListFilter.All;
 
-    public LeavesViewModel(LeaveService leaves, IAppDialogs dialogs)
+    public LeavesViewModel(LeaveService leaves, IAppDialogs dialogs, ServerChatClient server, UserAccountService users)
     {
         _leaves = leaves;
         _dialogs = dialogs;
+        _server = server;
+        _users = users;
         Months.Add(new MonthOption { Number = 1, Name = "Ocak" });
         Months.Add(new MonthOption { Number = 2, Name = "Şubat" });
         Months.Add(new MonthOption { Number = 3, Name = "Mart" });
@@ -180,10 +190,13 @@ public partial class LeavesViewModel : ObservableObject
     [ObservableProperty] private string _remainingText = "";
     [ObservableProperty] private string _balanceDetail = "";
     [ObservableProperty] private string _periodText = "";
-    [ObservableProperty] private string _allowanceText = "14";
+    [ObservableProperty] private string _allowanceText = "0";
     [ObservableProperty] private string _carryOverText = "0";
     [ObservableProperty] private bool _countWeekends;
     [ObservableProperty] private string _workdayHoursText = "8,5";
+    [ObservableProperty] private string _openingHoursText = "0";
+    [ObservableProperty] private string _openingMinutesText = "0";
+    [ObservableProperty] private bool _openingIsDebt;
     [ObservableProperty] private MonthOption? _selectedMonth;
     [ObservableProperty] private string _newTypeName = "";
     [ObservableProperty] private bool _newTypeCountsAnnual;
@@ -191,7 +204,7 @@ public partial class LeavesViewModel : ObservableObject
     [ObservableProperty] private bool _isNegativeRemaining;
     [ObservableProperty] private LeaveType? _selectedCustomType;
     [ObservableProperty] private bool _hasCustomTypes;
-    [ObservableProperty] private string _compensatoryText = "0";
+    [ObservableProperty] private string _compensatoryText = "0 saat";
     [ObservableProperty] private string _compensatoryDetail = "";
     [ObservableProperty] private bool _isNegativeCompensatory;
     [ObservableProperty] private bool _isPositiveCompensatory;
@@ -220,14 +233,18 @@ public partial class LeavesViewModel : ObservableObject
         var ctx = await _leaves.GetCountContextAsync();
         _ctx = ctx;
         var compensatory = await _leaves.GetCompensatoryBalanceAsync();
-        CompensatoryText = LeaveMath.FormatLedgerMinutes(compensatory.NetMinutes, compensatory.WorkdayHours);
+        CompensatoryText = LeaveMath.FormatLedgerMinutes(compensatory.NetMinutes);
         IsNegativeCompensatory = compensatory.NetMinutes < 0;
         IsPositiveCompensatory = compensatory.NetMinutes > 0;
         CompensatoryDetail =
-        CompensatoryDetail =
-            $"Telafili izin (borç) {LeaveMath.FormatMinutes(compensatory.DebitMinutes, compensatory.WorkdayHours)}" +
-            $" · Telafi (alacak) {LeaveMath.FormatMinutes(compensatory.CreditMinutes, compensatory.WorkdayHours)}" +
-            $" · iş günü {LeaveMath.FormatWorkdayHours(compensatory.WorkdayHours)}";
+            $"Açılış {LeaveMath.FormatLedgerMinutes(compensatory.OpeningMinutes)}" +
+            $" · Telafi {LeaveMath.FormatHoursMinutes(compensatory.CreditMinutes)}" +
+            $" · Telafili izin {LeaveMath.FormatHoursMinutes(compensatory.DebitMinutes)}";
+
+        var openingAbs = Math.Abs(compensatory.OpeningMinutes);
+        OpeningIsDebt = compensatory.OpeningMinutes < 0;
+        OpeningHoursText = (openingAbs / 60).ToString(Tr);
+        OpeningMinutesText = (openingAbs % 60).ToString(Tr);
 
         _allRecords = await _leaves.GetAllAsync();
         ApplyFilter();
@@ -267,8 +284,9 @@ public partial class LeavesViewModel : ObservableObject
 
         try
         {
-            await _leaves.SaveAsync(draft);
-            StatusMessage = $"{LeaveMath.ResolveKind(draft).ToDisplay()} kaydedildi.";
+            var saved = await _leaves.SaveAsync(draft);
+            await SubmitWorkLeaveAsync(saved);
+            StatusMessage = $"{LeaveMath.ResolveKind(saved).ToDisplay()} kaydedildi.";
             await LoadAsync();
         }
         catch (Exception ex)
@@ -379,6 +397,32 @@ public partial class LeavesViewModel : ObservableObject
     partial void OnCountWeekendsChanged(bool value) => _ = PersistBalanceAsync();
     partial void OnWorkdayHoursTextChanged(string value) => _ = PersistBalanceAsync();
     partial void OnSelectedMonthChanged(MonthOption? value) => _ = PersistBalanceAsync();
+    partial void OnOpeningHoursTextChanged(string value) => _ = PersistOpeningAsync();
+    partial void OnOpeningMinutesTextChanged(string value) => _ = PersistOpeningAsync();
+    partial void OnOpeningIsDebtChanged(bool value) => _ = PersistOpeningAsync();
+
+    private async Task PersistOpeningAsync()
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        var hours = 0;
+        var minutes = 0;
+        _ = int.TryParse(OpeningHoursText.Trim().Replace('−', '-'), NumberStyles.Integer, Tr, out hours);
+        _ = int.TryParse(OpeningMinutesText.Trim(), NumberStyles.Integer, Tr, out minutes);
+        hours = Math.Abs(hours);
+        minutes = Math.Clamp(Math.Abs(minutes), 0, 59);
+        var total = hours * 60 + minutes;
+        if (OpeningIsDebt)
+        {
+            total = -total;
+        }
+
+        await _leaves.SaveOpeningMinutesAsync(total);
+        await LoadAsync();
+    }
 
     private async Task PersistBalanceAsync()
     {
@@ -388,7 +432,7 @@ public partial class LeavesViewModel : ObservableObject
         }
 
         var month = SelectedMonth?.Number ?? 1;
-        var entitlement = LeaveService.ParseDecimal(AllowanceText, 14m);
+        var entitlement = LeaveService.ParseDecimal(AllowanceText, 0m);
         var carry = LeaveService.ParseDecimal(CarryOverText, 0m);
         var workday = LeaveService.ParseDecimal(WorkdayHoursText, LeaveMath.DefaultWorkdayHours);
         await _leaves.SaveBalanceSettingsAsync(month, entitlement, carry, CountWeekends, workday);
@@ -407,6 +451,41 @@ public partial class LeavesViewModel : ObservableObject
         return _dialogs.Confirm(
             $"Bu tarihlerde başka kayıt var: {names}. Yine de kaydedilsin mi?",
             "Çakışan kayıt");
+    }
+
+    private async Task SubmitWorkLeaveAsync(LeaveRecord saved)
+    {
+        if (!_users.UsesWork || saved.ServerLeaveId is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var remote = await _server.CreateLeaveAsync(new OrgLeaveCreateRequest
+            {
+                ClientId = saved.Id,
+                TypeName = saved.Type?.Name ?? saved.EntryKind.ToDisplay(),
+                EntryKind = (int)saved.EntryKind,
+                DurationKind = (int)saved.DurationKind,
+                StartDate = saved.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                EndDate = saved.EndDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                StartTime = saved.StartTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
+                EndTime = saved.EndTime?.ToString("HH:mm", CultureInfo.InvariantCulture),
+                StartHalf = (int)saved.StartHalf,
+                EndHalf = (int)saved.EndHalf,
+                Note = saved.Note,
+                DurationMinutes = saved.DurationMinutes
+            });
+            saved.ServerLeaveId = remote.Id;
+            saved.Status = LeaveService.MapServerStatus(remote.Status);
+            await _leaves.SaveAsync(saved);
+            StatusMessage = $"{LeaveMath.ResolveKind(saved).ToDisplay()} üst amire iletildi.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Yerel kaydedildi; sunucuya gidemedi: " + ex.Message;
+        }
     }
 
     [RelayCommand]

@@ -5,7 +5,7 @@ namespace Planner.Core.Data;
 
 public static class DatabaseInitializer
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 15;
 
     public static async Task InitializeAsync(PlannerDbContext db)
     {
@@ -63,10 +63,19 @@ public static class DatabaseInitializer
         await EnsureSettingAsync(db, SettingKeys.PomodoroFocusMinutes, "25");
         await EnsureSettingAsync(db, SettingKeys.PomodoroBreakMinutes, "5");
         await EnsureSettingAsync(db, SettingKeys.LeaveYearStartMonth, "1");
-        await EnsureSettingAsync(db, SettingKeys.LeaveAnnualAllowance, "14");
+        await EnsureSettingAsync(db, SettingKeys.LeaveAnnualAllowance, "0");
         await EnsureSettingAsync(db, SettingKeys.LeaveCarryOver, "0");
         await EnsureSettingAsync(db, SettingKeys.LeaveCountWeekends, "false");
         await EnsureSettingAsync(db, SettingKeys.LeaveWorkdayHours, "8.5");
+        await EnsureSettingAsync(db, SettingKeys.LeaveCompensatoryOpeningMinutes, "0");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerEnabled, "false");
+        await EnsureSettingAsync(db, SettingKeys.ChatLanEnabled, "true");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerUrl, "http://127.0.0.1:47880");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerToken, "");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerUserId, "");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerUsername, "");
+        await EnsureSettingAsync(db, SettingKeys.ChatServerDisplayName, "");
+        await EnsureSettingAsync(db, SettingKeys.RememberLogin, "false");
         await SetSettingAsync(db, SettingKeys.SchemaVersion, CurrentSchemaVersion.ToString());
 
         await EnsureLeaveTypeAsync(db, LeaveIds.Annual, "Yıllık izin", "#0F766E", true, 0);
@@ -80,7 +89,62 @@ public static class DatabaseInitializer
         await EnsureLeaveTypeAsync(db, LeaveIds.TelafiliIzin, "Telafili izin", "#C2410C", false, 8);
         await EnsureLeaveTypeAsync(db, LeaveIds.Telafi, "Telafi", "#059669", false, 9);
 
+        await EnsureNetworkDefaultsAsync(db);
+
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureNetworkDefaultsAsync(PlannerDbContext db)
+    {
+        if (!await db.MeProfiles.AnyAsync())
+        {
+            db.MeProfiles.Add(new MeProfile
+            {
+                Id = NetworkIds.Me,
+                Name = "Ben",
+                Notes = null,
+                UpdatedAt = DateTime.Now
+            });
+        }
+
+        await EnsureSegmentAsync(db, SegmentIds.Kurum, "Kurum", SegmentKind.Kurum, "#2563EB", 0);
+        await EnsureSegmentAsync(db, SegmentIds.Aile, "Aile", SegmentKind.Aile, "#7C3AED", 1);
+        await EnsureSegmentAsync(db, SegmentIds.Arkadas, "Arkadaş", SegmentKind.Arkadas, "#0D9488", 2);
+
+        if (!await db.Organizations.AnyAsync(o => o.SegmentId == SegmentIds.Kurum))
+        {
+            db.Organizations.Add(new Organization
+            {
+                Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                SegmentId = SegmentIds.Kurum,
+                Name = "Kurum",
+                UpdatedAt = DateTime.Now
+            });
+        }
+    }
+
+    private static async Task EnsureSegmentAsync(
+        PlannerDbContext db,
+        Guid id,
+        string name,
+        SegmentKind kind,
+        string colorHex,
+        int sortOrder)
+    {
+        if (await db.Segments.AnyAsync(s => s.Id == id))
+        {
+            return;
+        }
+
+        db.Segments.Add(new Segment
+        {
+            Id = id,
+            Name = name,
+            Kind = kind,
+            ColorHex = colorHex,
+            SortOrder = sortOrder,
+            CreatedAt = DateTime.Now
+        });
     }
 
     private static async Task EnsureLeaveTypeAsync(
@@ -158,5 +222,17 @@ public static class SettingKeys
     public const string LeaveCarryOver = "LeaveCarryOver";
     public const string LeaveCountWeekends = "LeaveCountWeekends";
     public const string LeaveWorkdayHours = "LeaveWorkdayHours";
+    public const string LeaveCompensatoryOpeningMinutes = "LeaveCompensatoryOpeningMinutes";
+    public const string CurrentUserId = "CurrentUserId";
+    public const string ChatServerEnabled = "ChatServerEnabled";
+    public const string ChatLanEnabled = "ChatLanEnabled";
+    public const string ChatServerUrl = "ChatServerUrl";
+    public const string ChatServerToken = "ChatServerToken";
+    public const string ChatServerUserId = "ChatServerUserId";
+    public const string ChatServerUsername = "ChatServerUsername";
+    public const string ChatServerDisplayName = "ChatServerDisplayName";
+    public const string RememberLogin = "RememberLogin";
     public const string SchemaVersion = "SchemaVersion";
+    public const string LastPage = "LastPage";
+    public const string RolloverDate = "RolloverDate";
 }

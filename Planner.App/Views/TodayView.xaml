@@ -5,178 +5,194 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+
         <DockPanel Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                <Border CornerRadius="10" Background="{DynamicResource SurfaceAltBrush}" Padding="3" Margin="0,0,10,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Pano" Command="{Binding ShowBoardCommand}" Padding="12,6">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ChipButton}">
+                                    <Setter Property="Margin" Value="0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBoardView}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="Liste" Command="{Binding ShowListCommand}" Padding="12,6">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ChipButton}">
+                                    <Setter Property="Margin" Value="0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsListView}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
                 <Button Style="{StaticResource SecondaryButton}" Content="◀" Command="{Binding PreviousDayCommand}" Width="40" Margin="0,0,6,0"/>
                 <Button Style="{StaticResource SecondaryButton}" Content="Bugün" Command="{Binding GoToTodayCommand}" Margin="0,0,6,0"
                         Visibility="{Binding IsToday, Converter={StaticResource BoolToVisInv}}"/>
                 <Button Style="{StaticResource SecondaryButton}" Content="▶" Command="{Binding NextDayCommand}" Width="40" Margin="0,0,8,0"/>
-                <Button Style="{StaticResource PrimaryButton}" Content="+ Yeni kayıt" Command="{Binding NewTaskCommand}"/>
+                <Button Style="{StaticResource PrimaryButton}" Content="Bu güne görev" Command="{Binding NewTaskCommand}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="{Binding DateLabel}" FontSize="18" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding SummaryText}" Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
             </StackPanel>
         </DockPanel>
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.4*"/>
-                <ColumnDefinition Width="16"/>
-                <ColumnDefinition Width="1*"/>
-            </Grid.ColumnDefinitions>
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <ItemsControl ItemsSource="{Binding Leaves}" Margin="0,0,0,10"
-                                  Visibility="{Binding HasAllDayLeaves, Converter={StaticResource BoolToVis}}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,6" CornerRadius="10" Padding="12,10"
-                                        Background="{DynamicResource AccentSoftBrush}"
-                                        BorderBrush="{Binding ColorHex, Converter={StaticResource HexToBrush}}"
-                                        BorderThickness="3,0,0,0">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource AccentBrush}"/>
-                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}"
-                                                   FontSize="12" Margin="0,4,0,0"/>
+
+        <StackPanel Grid.Row="1">
+            <Border Margin="0,0,0,10" CornerRadius="10" Padding="12,8"
+                    Background="{DynamicResource PriorityBandBrush}"
+                    Visibility="{Binding HasOverdue, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding OverdueText}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </Border>
+            <ItemsControl ItemsSource="{Binding Leaves}" Margin="0,0,0,10"
+                          Visibility="{Binding HasLeaves, Converter={StaticResource BoolToVis}}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,8,8" CornerRadius="10" Padding="12,8"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{Binding ColorHex, Converter={StaticResource HexToBrush}}"
+                                BorderThickness="3,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <Grid Grid.Row="2" Visibility="{Binding IsBoardView, Converter={StaticResource BoolToVis}}">
+            <ItemsControl ItemsSource="{Binding Columns}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="1"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,10,0" CornerRadius="14" Padding="10,12"
+                                AllowDrop="True"
+                                Background="{DynamicResource KanbanColumnBrush}"
+                                Drop="OnColumnDrop"
+                                DragOver="OnColumnDragOver"
+                                DragLeave="OnColumnDragLeave"
+                                MinWidth="180">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="4,0,4,10">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource IconCircleButton}" Content="+"
+                                            ToolTip="Bu sütuna görev ekle"
+                                            Command="{Binding DataContext.NewInColumnCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                Background="{Binding AccentHex, Converter={StaticResource HexToBrush}}"/>
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                                        <Border Margin="8,0,0,0" CornerRadius="8" Padding="7,1" Background="{DynamicResource SurfaceBrush}"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding CountText}" FontSize="11" Style="{StaticResource MutedText}"/>
+                                        </Border>
                                     </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Text="Saatlik şerit" FontWeight="SemiBold" Margin="4,0,0,8"/>
-                    <ItemsControl ItemsSource="{Binding Hours}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,4" CornerRadius="8" Padding="8,6" BorderThickness="1"
-                                        BorderBrush="{DynamicResource CardBorderBrush}">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsWorkBand}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource WorkBandBrush}"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Left" Style="{StaticResource ChipButton}" Width="64"
-                                                Content="{Binding Label}"
-                                                Command="{Binding DataContext.NewAtHourCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding Hour}"/>
-                                        <StackPanel>
-                                            <ItemsControl ItemsSource="{Binding Leaves}"
-                                                          Visibility="{Binding HasLeaves, Converter={StaticResource BoolToVis}}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Margin="4,0,0,4" CornerRadius="8" Padding="8,4"
-                                                                Background="{DynamicResource AccentSoftBrush}">
-                                                            <TextBlock Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap">
-                                                                <Run Text="{Binding Title, Mode=OneWay}"/>
-                                                                <Run Text="  "/>
-                                                                <Run Text="{Binding HalfText, Mode=OneWay}"/>
-                                                            </TextBlock>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                            <ItemsControl ItemsSource="{Binding Items}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <views:TaskCard/>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </DockPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </ScrollViewer>
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,12" Background="{DynamicResource PriorityBandBrush}">
-                        <StackPanel>
-                            <TextBlock Text="Bugünün öncelikleri" FontWeight="SemiBold" FontSize="16"/>
-                            <TextBlock Style="{StaticResource MutedText}" FontSize="12" Margin="0,4,0,8"
-                                       Text="En fazla 3. Karttaki «Öncelik» ile sabitleyin."/>
-                            <ItemsControl ItemsSource="{Binding Priorities}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <views:TaskCard/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="Henüz öncelik yok." Style="{StaticResource MutedText}"
-                                       Visibility="{Binding Priorities.Count, Converter={StaticResource EqualsConverter}, ConverterParameter=0}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="Saatsiz" FontWeight="SemiBold"/>
-                            <ItemsControl ItemsSource="{Binding Untimed}" Margin="0,8,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <views:TaskCard/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="Gecikmiş" FontWeight="SemiBold"/>
-                            <ItemsControl ItemsSource="{Binding Overdue}" Margin="0,8,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <views:TaskCard/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="Alışkanlıklar" FontWeight="SemiBold"/>
-                            <ItemsControl ItemsSource="{Binding Habits}" Margin="0,8,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <DockPanel Margin="0,0,0,6">
-                                            <CheckBox IsChecked="{Binding IsCompleted, Mode=OneWay}" Command="{Binding ToggleCommand}" Content="{Binding Name}"/>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding StreakText}" Style="{StaticResource MutedText}" FontSize="12"/>
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="Kişi günleri" FontWeight="SemiBold"/>
-                            <ItemsControl ItemsSource="{Binding ContactEvents}" Margin="0,8,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding}" Margin="0,0,0,4"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="Kasa kilitliyken kişi günleri gösterilmez." Style="{StaticResource MutedText}" FontSize="12"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="Günün notu" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding DailyNote, UpdateSourceTrigger=PropertyChanged}" Height="120"
-                                     TextWrapping="Wrap" AcceptsReturn="True" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
+                                </DockPanel>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Items}" MinHeight="80"
+                                                  Background="Transparent">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <views:KanbanCard PreviewMouseLeftButtonDown="OnCardMouseDown"
+                                                                  PreviewMouseMove="OnCardMouseMove"
+                                                                  GiveFeedback="OnCardGiveFeedback"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Grid>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding IsListView, Converter={StaticResource BoolToVis}}">
+            <ItemsControl ItemsSource="{Binding Columns}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,0,0,16">
+                            <DockPanel Margin="0,0,0,8">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource IconCircleButton}" Content="+"
+                                        Command="{Binding DataContext.NewInColumnCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            Background="{Binding AccentHex, Converter={StaticResource HexToBrush}}"/>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding CountText}" Style="{StaticResource MutedText}" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <views:KanbanCard/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Kart yok" Style="{StaticResource MutedText}" FontSize="12" Margin="4,0,0,0"
+                                       Visibility="{Binding Count, Converter={StaticResource EqualsConverter}, ConverterParameter=0}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Margin="0,10,0,0" CornerRadius="12" Padding="12,10"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+            <StackPanel>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource ChipButton}"
+                            Content="{Binding NoteToggleText}"
+                            Command="{Binding ToggleDailyNoteCommand}"/>
+                    <TextBlock Text="Günün notu" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </DockPanel>
+                <TextBox Text="{Binding DailyNote, UpdateSourceTrigger=PropertyChanged}" Height="100"
+                         TextWrapping="Wrap" AcceptsReturn="True" Margin="0,10,0,0"
+                         Visibility="{Binding ShowDailyNote, Converter={StaticResource BoolToVis}}"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

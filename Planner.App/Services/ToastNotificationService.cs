@@ -62,4 +62,27 @@ public sealed class ToastNotificationService : IReminderNotifier
             .AddText(body)
             .Show();
     }
+
+    public void ShowFriendRequest(string peerKey, string name)
+    {
+        var who = string.IsNullOrWhiteSpace(name) ? "Bir kullanıcı" : name.Trim();
+        new ToastContentBuilder()
+            .AddArgument("action", "friendRequest")
+            .AddArgument("peerKey", peerKey)
+            .AddArgument("name", who)
+            .AddText("Arkadaşlık isteği · Yaver")
+            .AddText(who + " sizi eklemek istiyor.")
+            .AddButton(new ToastButton()
+                .SetContent("Kabul et")
+                .AddArgument("action", "friendAccept")
+                .AddArgument("peerKey", peerKey)
+                .AddArgument("name", who))
+            .AddButton(new ToastButton()
+                .SetContent("Reddet")
+                .AddArgument("action", "friendDecline")
+                .AddArgument("peerKey", peerKey)
+                .AddArgument("name", who))
+            .SetToastScenario(ToastScenario.Reminder)
+            .Show();
+    }
 }

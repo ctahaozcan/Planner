@@ -16,10 +16,12 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ThemeService _theme;
     private readonly CategoryService _categories;
     private readonly TaskService _tasks;
-    private readonly VaultService _vault;
     private readonly BackupService _backup;
     private readonly IAppDialogs _dialogs;
     private readonly ITaskChangeSignal _signal;
+    private readonly UserAccountService _users;
+    private readonly ChatViewModel _chat;
+    private readonly ChatHub _hub;
     private bool _loading;
 
     public SettingsViewModel(
@@ -27,19 +29,23 @@ public partial class SettingsViewModel : ObservableObject
         ThemeService theme,
         CategoryService categories,
         TaskService tasks,
-        VaultService vault,
         BackupService backup,
         IAppDialogs dialogs,
-        ITaskChangeSignal signal)
+        ITaskChangeSignal signal,
+        UserAccountService users,
+        ChatViewModel chat,
+        ChatHub hub)
     {
         _settings = settings;
         _theme = theme;
         _categories = categories;
         _tasks = tasks;
-        _vault = vault;
         _backup = backup;
         _dialogs = dialogs;
         _signal = signal;
+        _users = users;
+        _chat = chat;
+        _hub = hub;
         DataFolder = AppPaths.Root;
         Themes.Add("System");
         Themes.Add("Light");
@@ -59,6 +65,7 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<Category> Categories { get; } = new();
     public ObservableCollection<string> TimeOptions { get; } = new(BuildTimes());
     public ObservableCollection<string> HotkeyKeys { get; } = new();
+    public ObservableCollection<AppUser> Users { get; } = new();
 
     [ObservableProperty] private string _selectedTheme = "System";
     [ObservableProperty] private string _selectedThemeLabel = "Sistem";
@@ -87,6 +94,17 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _hotkeyStatus = "";
     [ObservableProperty] private int _pomodoroFocus = 25;
     [ObservableProperty] private int _pomodoroBreak = 5;
+    [ObservableProperty] private string _currentUserLabel = "Ben";
+    [ObservableProperty] private AppUser? _selectedUser;
+    [ObservableProperty] private string _newUsername = "";
+    [ObservableProperty] private string _newDisplayName = "";
+    [ObservableProperty] private string _newUserPassword = "";
+    [ObservableProperty] private bool _chatServerEnabled;
+    [ObservableProperty] private bool _chatLanEnabled = true;
+    [ObservableProperty] private string _chatServerUrl = Planner.Chat.ChatRoutes.DefaultClientUrl;
+    [ObservableProperty] private string _chatServerUser = "";
+    [ObservableProperty] private string _chatServerPassword = "";
+    [ObservableProperty] private string _chatServerStatus = "Kapalı";
 
     public string HotkeyPreview => HotkeyService.Format(HotkeyCtrl, HotkeyAlt, HotkeyShift, ParseKey(HotkeyKey));
 
@@ -130,12 +148,25 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         await ReloadCategoriesAsync();
+        await ReloadUsersAsync();
+        ChatServerEnabled = await _settings.GetBoolAsync(SettingKeys.ChatServerEnabled);
+        ChatLanEnabled = await _settings.GetBoolAsync(SettingKeys.ChatLanEnabled, true);
+        ChatServerUrl = await _settings.GetAsync(SettingKeys.ChatServerUrl, Planner.Chat.ChatRoutes.DefaultClientUrl);
+        ChatServerUser = await _settings.GetAsync(SettingKeys.ChatServerUsername, "");
+        ChatServerStatus = _hub.ServerStatus;
         _loading = false;
         OnPropertyChanged(nameof(HotkeyPreview));
     }
 
+    public event Action? UserSwitched;
+
     partial void OnSelectedThemeLabelChanged(string value)
     {
+        if (_loading)
+        {
+            return;
+        }
+
         SelectedTheme = value switch
         {
             "Koyu" => "Dark",
@@ -143,6 +174,19 @@ public partial class SettingsViewModel : ObservableObject
             _ => "System"
         };
         _ = ApplyThemeAsync();
+    }
+
+    public void SyncTheme(string key)
+    {
+        _loading = true;
+        SelectedTheme = key;
+        SelectedThemeLabel = key switch
+        {
+            "Dark" => "Koyu",
+            "Light" => "Açık",
+            _ => "Sistem"
+        };
+        _loading = false;
     }
 
     partial void OnStartWithWindowsChanged(bool value) { if (!_loading) _ = ApplyStartupAsync(); }
@@ -164,6 +208,194 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnHotkeyAltChanged(bool value) { OnPropertyChanged(nameof(HotkeyPreview)); if (!_loading) _ = SaveHotkeyAsync(); }
     partial void OnHotkeyShiftChanged(bool value) { OnPropertyChanged(nameof(HotkeyPreview)); if (!_loading) _ = SaveHotkeyAsync(); }
     partial void OnHotkeyKeyChanged(string value) { OnPropertyChanged(nameof(HotkeyPreview)); if (!_loading) _ = SaveHotkeyAsync(); }
+
+    partial void OnChatServerEnabledChanged(bool value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _ = ApplyServerFlagAsync(value);
+    }
+
+    partial void OnChatServerUrlChanged(string value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _ = _settings.SetAsync(SettingKeys.ChatServerUrl, (value ?? "").Trim());
+    }
+
+    private async Task ApplyServerFlagAsync(bool enabled)
+    {
+        await _settings.SetBoolAsync(SettingKeys.ChatServerEnabled, enabled);
+        await _hub.RestartAsync();
+        ChatServerStatus = _hub.ServerStatus;
+        await _chat.LoadAsync();
+    }
+
+    [RelayCommand]
+    private async Task AddUserAsync()
+    {
+        try
+        {
+            await _users.AddAsync(NewUsername, NewDisplayName, string.IsNullOrWhiteSpace(NewUserPassword) ? null : NewUserPassword);
+            NewUsername = "";
+            NewDisplayName = "";
+            NewUserPassword = "";
+            StatusMessage = "Kullanıcı eklendi.";
+            await ReloadUsersAsync();
+            await _chat.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _dialogs.Info(ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task SwitchUserAsync()
+    {
+        if (SelectedUser is null)
+        {
+            return;
+        }
+
+        string? password = null;
+        if (SelectedUser.HasPassword)
+        {
+            password = _dialogs.PromptPassword("Kullanıcı değiştir", $"{SelectedUser.DisplayName} için şifre:");
+            if (password is null)
+            {
+                return;
+            }
+        }
+
+        if (!await _users.SwitchAsync(SelectedUser.Id, password))
+        {
+            _dialogs.Info("Şifre yanlış veya kullanıcı bulunamadı.");
+            return;
+        }
+
+        CurrentUserLabel = _users.CurrentName;
+        await _chat.LoadAsync();
+        UserSwitched?.Invoke();
+        StatusMessage = $"Oturum: {_users.CurrentName}";
+    }
+
+    [RelayCommand]
+    private async Task SignOutAsync()
+    {
+        if (!_dialogs.Confirm("Oturum kapatılsın mı? Yaver kapanır; tekrar açınca giriş yaparsınız.", "Çıkış"))
+        {
+            return;
+        }
+
+        await _users.SignOutAsync();
+        try { await _hub.Server.ClearSessionAsync(); } catch { /* ignore */ }
+        Application.Current.Shutdown();
+    }
+
+    private async Task ReloadUsersAsync()
+    {
+        Users.Clear();
+        foreach (var user in await _users.ListAsync())
+        {
+            Users.Add(user);
+        }
+
+        CurrentUserLabel = _users.CurrentName;
+    }
+
+    [RelayCommand]
+    private async Task ConnectChatServerAsync()
+    {
+        try
+        {
+            await _settings.SetAsync(SettingKeys.ChatServerUrl, ChatServerUrl.Trim());
+            await _settings.SetBoolAsync(SettingKeys.ChatServerEnabled, true);
+            _loading = true;
+            ChatServerEnabled = true;
+            _loading = false;
+            if (!string.IsNullOrWhiteSpace(ChatServerPassword))
+            {
+                var auth = await _hub.Server.LoginAsync(ChatServerUser, ChatServerPassword);
+                await _hub.Server.SaveSessionAsync(auth);
+                ChatServerPassword = "";
+            }
+
+            await _hub.RestartAsync();
+            ChatServerStatus = _hub.ServerStatus;
+            StatusMessage = _hub.ServerConnected || _hub.ServerStatus == "Bağlanıyor…"
+                ? "Sunucuya bağlanılıyor."
+                : ChatServerStatus;
+            await _chat.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ChatServerStatus = ex.Message;
+            _dialogs.Info(ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RegisterChatServerAsync()
+    {
+        try
+        {
+            await _settings.SetAsync(SettingKeys.ChatServerUrl, ChatServerUrl.Trim());
+            var name = string.IsNullOrWhiteSpace(_users.CurrentName) ? ChatServerUser : _users.CurrentName;
+            var auth = await _hub.Server.RegisterAsync(ChatServerUser, ChatServerPassword, name);
+            await _hub.Server.SaveSessionAsync(auth);
+            ChatServerPassword = "";
+            _loading = true;
+            ChatServerEnabled = true;
+            _loading = false;
+            await _hub.RestartAsync();
+            ChatServerStatus = _hub.ServerStatus;
+            StatusMessage = "Sunucu hesabı oluşturuldu.";
+            await _chat.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ChatServerStatus = ex.Message;
+            _dialogs.Info(ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DisconnectChatServerAsync()
+    {
+        await _hub.Server.ClearSessionAsync();
+        _loading = true;
+        await _settings.SetBoolAsync(SettingKeys.ChatServerEnabled, false);
+        ChatServerEnabled = false;
+        _loading = false;
+        ChatServerStatus = "Kapalı";
+        await _hub.RestartAsync();
+        StatusMessage = "Sunucu oturumu kapatıldı.";
+        await _chat.LoadAsync();
+    }
+
+    partial void OnChatLanEnabledChanged(bool value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _ = ApplyLanAsync(value);
+    }
+
+    private async Task ApplyLanAsync(bool enabled)
+    {
+        await _settings.SetBoolAsync(SettingKeys.ChatLanEnabled, enabled);
+        await _hub.RestartAsync();
+        await _chat.LoadAsync();
+    }
 
     [RelayCommand]
     private async Task AddCategoryAsync()
@@ -213,66 +445,6 @@ public partial class SettingsViewModel : ObservableObject
             FileName = DataFolder,
             UseShellExecute = true
         });
-    }
-
-    [RelayCommand]
-    private async Task ResetVaultAsync()
-    {
-        if (!_dialogs.Confirm(
-                "Kişiler kasası sıfırlansın mı? Tüm kayıtlı kişiler kalıcı olarak silinir. Unutulan şifreyi kurtarmanın tek yolu budur.",
-                "Kasayı sıfırla"))
-        {
-            return;
-        }
-
-        await _vault.ResetVaultAsync();
-        StatusMessage = "Kişiler kasası sıfırlandı. Yeni şifre belirlemek için Kişiler sayfasına gidin.";
-    }
-
-    [RelayCommand]
-    private async Task ExportVaultAsync()
-    {
-        if (!_dialogs.Confirm("Şifreyi unutursanız kişiler kurtarılamaz. Yedek dosyasını güvenli saklayın.", "Kasa yedeği"))
-        {
-            return;
-        }
-
-        var password = _dialogs.PromptPassword("Kasa yedeği", "Kasa şifrenizi girin (yedek bu şifreyle korunur).");
-        if (password is null) return;
-        var path = _dialogs.SaveFile("Kasa yedeği (*.plnvault)|*.plnvault", $"yaver-kasa-{DateTime.Now:yyyyMMdd}.plnvault");
-        if (path is null) return;
-        try
-        {
-            await _backup.ExportVaultAsync(path, password);
-            StatusMessage = "Kasa yedeği kaydedildi.";
-        }
-        catch (Exception ex)
-        {
-            _dialogs.Info(ex.Message);
-        }
-    }
-
-    [RelayCommand]
-    private async Task ImportVaultAsync()
-    {
-        if (!_dialogs.Confirm("Mevcut kişiler bu yedekle değiştirilir. Devam edilsin mi?", "Kasa geri yükle"))
-        {
-            return;
-        }
-
-        var path = _dialogs.OpenFile("Kasa yedeği (*.plnvault)|*.plnvault");
-        if (path is null) return;
-        var password = _dialogs.PromptPassword("Kasa geri yükle", "Yedek şifresini girin.");
-        if (password is null) return;
-        try
-        {
-            await _backup.ImportVaultAsync(path, password);
-            StatusMessage = "Kasa geri yüklendi. Kişiler sayfasından kilidi açın.";
-        }
-        catch (Exception ex)
-        {
-            _dialogs.Info(ex.Message);
-        }
     }
 
     [RelayCommand]

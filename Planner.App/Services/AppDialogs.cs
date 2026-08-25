@@ -9,34 +9,70 @@ namespace Planner.App.Services;
 
 public interface IAppDialogs
 {
-    Task<bool> EditTaskAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null);
-    Task<bool> EditContactAsync(ContactRecord? contact);
+    Task<bool> EditTaskAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null, PlannerTaskStatus? presetStatus = null);
+    Task<bool> ShowTaskDetailsAsync(Guid taskId, DateOnly? occurrenceDate = null);
     Task<LeaveRecord?> EditLeaveAsync(LeaveRecord? existing, LeaveEntryKind? presetKind = null);
     bool Confirm(string message, string title = "Onay");
     bool? ConfirmSeries(string message, string title = "Yineleyen kayıt");
     void Info(string message, string title = "Yaver");
+    string? Prompt(string title, string message, string? initial = null);
     string? PromptPassword(string title, string message);
     string? SaveFile(string filter, string defaultName);
     string? OpenFile(string filter);
     string? OpenAnyFile();
+    int PickIndex(string title, string hint, IReadOnlyList<string> items);
 }
 
 public sealed class AppDialogs : IAppDialogs
 {
     private readonly IServiceProvider _services;
     private readonly LeaveService _leaves;
+    private readonly UserAccountService _users;
 
-    public AppDialogs(IServiceProvider services, LeaveService leaves)
+    public AppDialogs(IServiceProvider services, LeaveService leaves, UserAccountService users)
     {
         _services = services;
         _leaves = leaves;
+        _users = users;
     }
 
-    public async Task<bool> EditTaskAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null)
+    public async Task<bool> EditTaskAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null, PlannerTaskStatus? presetStatus = null)
     {
         var vm = _services.GetRequiredService<TaskEditorViewModel>();
-        await vm.LoadAsync(taskId, presetDate, occurrenceDate, presetTime);
+        await vm.LoadAsync(taskId, presetDate, occurrenceDate, presetTime, presetStatus);
         var window = new TaskEditorWindow
+        {
+            DataContext = vm,
+            Owner = Application.Current.MainWindow
+        };
+        vm.CloseRequested += result =>
+        {
+            try
+            {
+                window.DialogResult = result;
+            }
+            catch
+            {
+                window.Close();
+            }
+        };
+        var saved = window.ShowDialog() == true;
+        if (!saved)
+        {
+            vm.DiscardPendingAttachments();
+        }
+
+        return saved;
+    }
+
+    public async Task<bool> ShowTaskDetailsAsync(Guid taskId, DateOnly? occurrenceDate = null)
+    {
+        var vm = new TaskDetailViewModel(
+            _services.GetRequiredService<TaskService>(),
+            _services.GetRequiredService<AttachmentService>(),
+            this);
+        await vm.LoadAsync(taskId, occurrenceDate);
+        var window = new TaskDetailWindow
         {
             DataContext = vm,
             Owner = Application.Current.MainWindow
@@ -55,29 +91,6 @@ public sealed class AppDialogs : IAppDialogs
         return window.ShowDialog() == true;
     }
 
-    public async Task<bool> EditContactAsync(ContactRecord? contact)
-    {
-        var vm = new ContactEditorViewModel(contact);
-        await Task.CompletedTask;
-        var window = new ContactEditorWindow
-        {
-            DataContext = vm,
-            Owner = Application.Current.MainWindow
-        };
-        vm.CloseRequested += result =>
-        {
-            try
-            {
-                window.DialogResult = result;
-            }
-            catch
-            {
-                window.Close();
-            }
-        };
-        return window.ShowDialog() == true && vm.Result is not null;
-    }
-
     public async Task<LeaveRecord?> EditLeaveAsync(LeaveRecord? existing, LeaveEntryKind? presetKind = null)
     {
         var types = await _leaves.GetTypesAsync();
@@ -88,7 +101,7 @@ public sealed class AppDialogs : IAppDialogs
         }
 
         var ctx = await _leaves.GetCountContextAsync();
-        var vm = new LeaveEditorViewModel(types, existing, ctx, presetKind);
+        var vm = new LeaveEditorViewModel(types, existing, ctx, presetKind, _users.UsesWork);
         var window = new LeaveEditorWindow
         {
             DataContext = vm,
@@ -126,6 +139,15 @@ public sealed class AppDialogs : IAppDialogs
     public void Info(string message, string title = "Yaver")
         => MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information);
 
+    public string? Prompt(string title, string message, string? initial = null)
+    {
+        var window = new TextPromptWindow(title, message, initial)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.Value : null;
+    }
+
     public string? PromptPassword(string title, string message)
     {
         var window = new PasswordPromptWindow(title, message)
@@ -155,5 +177,20 @@ public sealed class AppDialogs : IAppDialogs
     {
         var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "Tüm dosyalar|*.*" };
         return dlg.ShowDialog() == true ? dlg.FileName : null;
+    }
+
+    public int PickIndex(string title, string hint, IReadOnlyList<string> items)
+    {
+        if (items.Count == 0)
+        {
+            Info("Seçilecek kişi yok. Önce sohbetten arkadaş ekleyin.");
+            return -1;
+        }
+
+        var window = new PickListWindow(title, hint, items)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.SelectedIndex : -1;
     }
 }

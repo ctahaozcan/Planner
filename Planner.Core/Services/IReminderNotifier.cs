@@ -10,12 +10,15 @@ public interface IReminderNotifier
     void ShowEveningClose(string title, string body);
     void ShowFocusEnded(string title, string body);
     void ShowInfo(string title, string body);
+    void ShowFriendRequest(string peerKey, string name);
 }
 
 public interface ITaskChangeSignal
 {
     event Action? TasksChanged;
+    event Action<string, string>? Info;
     void NotifyChanged();
+    void NotifyInfo(string title, string body);
 }
 
 public static class SnoozePresets

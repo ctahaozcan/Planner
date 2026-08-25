@@ -14,20 +14,26 @@ public partial class TaskEditorViewModel : ObservableObject
     private readonly CategoryService _categories;
     private readonly AttachmentService _attachments;
     private readonly IAppDialogs _dialogs;
+    private readonly UserAccountService _users;
+    private readonly FriendshipService _friends;
     private Guid? _id;
     private DateOnly? _occurrenceDate;
-    private readonly List<string> _pendingFiles = [];
+    private readonly List<TaskAttachment> _stagedAttachments = [];
 
     public TaskEditorViewModel(
         TaskService tasks,
         CategoryService categories,
         AttachmentService attachments,
-        IAppDialogs dialogs)
+        IAppDialogs dialogs,
+        UserAccountService users,
+        FriendshipService friends)
     {
         _tasks = tasks;
         _categories = categories;
         _attachments = attachments;
         _dialogs = dialogs;
+        _users = users;
+        _friends = friends;
         Hours.Add("");
         for (var h = 0; h < 24; h++)
         {
@@ -57,6 +63,7 @@ public partial class TaskEditorViewModel : ObservableObject
     };
     public ObservableCollection<RecurrenceOption> RecurrenceOptions { get; } = new();
     public ObservableCollection<TaskAttachment> Attachments { get; } = new();
+    public ObservableCollection<AssigneeOption> Assignees { get; } = new();
 
     public event Action<bool>? CloseRequested;
 
@@ -87,15 +94,16 @@ public partial class TaskEditorViewModel : ObservableObject
     [ObservableProperty] private bool _isRecurringEdit;
     [ObservableProperty] private bool _editEntireSeries = true;
     [ObservableProperty] private bool _canAttach;
+    [ObservableProperty] private AssigneeOption? _selectedAssignee;
 
     public bool ShowWeekdays => SelectedRecurrence?.Kind == RecurrenceKind.Weekly;
 
     partial void OnSelectedRecurrenceChanged(RecurrenceOption? value)
         => OnPropertyChanged(nameof(ShowWeekdays));
 
-    public async Task LoadAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null)
+    public async Task LoadAsync(Guid? taskId, DateOnly? presetDate, DateOnly? occurrenceDate = null, TimeOnly? presetTime = null, PlannerTaskStatus? presetStatus = null)
     {
-        _pendingFiles.Clear();
+        DiscardPendingAttachments();
         Attachments.Clear();
         var cats = await _categories.GetAllAsync();
         Categories.Clear();
@@ -106,6 +114,17 @@ public partial class TaskEditorViewModel : ObservableObject
 
         SelectedStatus = Statuses[0];
         SelectedRecurrence = RecurrenceOptions[0];
+        Assignees.Clear();
+        Assignees.Add(new AssigneeOption(null, "Atanmamış"));
+        var friendIds = await _friends.AcceptedFriendIdsAsync();
+        var users = await _users.ListAsync();
+        foreach (var friendId in friendIds)
+        {
+            var user = users.FirstOrDefault(u => u.Id == friendId);
+            Assignees.Add(new AssigneeOption(friendId, user?.DisplayName ?? friendId.ToString("N")[..8]));
+        }
+
+        SelectedAssignee = Assignees[0];
         _occurrenceDate = occurrenceDate;
         if (taskId is { } id)
         {
@@ -138,6 +157,7 @@ public partial class TaskEditorViewModel : ObservableObject
             IsRecurringEdit = task.IsRecurring;
             EditEntireSeries = true;
             CanAttach = true;
+            SelectedAssignee = Assignees.FirstOrDefault(a => a.Id == task.AssignedToUserId) ?? Assignees[0];
             foreach (var a in await _attachments.GetForTaskAsync(id))
             {
                 Attachments.Add(a);
@@ -156,6 +176,11 @@ public partial class TaskEditorViewModel : ObservableObject
             {
                 Hour = t.Hour.ToString("00");
                 Minute = t.Minute.ToString("00");
+            }
+
+            if (presetStatus is { } st)
+            {
+                SelectedStatus = Statuses.FirstOrDefault(s => s.Value == st) ?? Statuses[0];
             }
         }
 
@@ -211,21 +236,25 @@ public partial class TaskEditorViewModel : ObservableObject
             RecurrenceKind = kind,
             RecurrenceWeekdays = kind == RecurrenceKind.Weekly ? PackWeekdays() : 0,
             RecurrenceMonthDay = kind == RecurrenceKind.Monthly ? DateOnly.FromDateTime(Date).Day : null,
-            RecurrenceEndDate = HasEndDate ? DateOnly.FromDateTime(EndDate) : null
+            RecurrenceEndDate = HasEndDate ? DateOnly.FromDateTime(EndDate) : null,
+            AssignedToUserId = SelectedAssignee?.Id,
+            AssignedByUserId = SelectedAssignee?.Id is Guid ? _users.Current?.Id : null
         };
 
         if (_id is null)
         {
             await _tasks.AddAsync(entity);
-            foreach (var file in _pendingFiles)
+            foreach (var staged in _stagedAttachments.ToList())
             {
                 try
                 {
-                    await _attachments.AddAsync(entity.Id, file);
+                    await _attachments.CommitStagedAsync(entity.Id, staged);
+                    _stagedAttachments.Remove(staged);
                 }
                 catch (Exception ex)
                 {
-                    ErrorMessage = ex.Message;
+                    ErrorMessage = $"Ek kaydedilemedi: {ex.Message}";
+                    return;
                 }
             }
         }
@@ -266,29 +295,25 @@ public partial class TaskEditorViewModel : ObservableObject
             return;
         }
 
-        if (_id is { } id)
+        try
         {
-            try
+            if (_id is { } id)
             {
                 var row = await _attachments.AddAsync(id, path);
                 Attachments.Add(row);
             }
-            catch (Exception ex)
+            else
             {
-                ErrorMessage = ex.Message;
+                var staged = _attachments.StageCopy(path);
+                _stagedAttachments.Add(staged);
+                Attachments.Add(staged);
+                CanAttach = true;
             }
         }
-        else
+        catch (Exception ex)
         {
-            _pendingFiles.Add(path);
-            Attachments.Add(new TaskAttachment
-            {
-                Id = Guid.NewGuid(),
-                OriginalName = Path.GetFileName(path),
-                SizeBytes = info.Length,
-                CreatedAt = DateTime.Now
-            });
-            CanAttach = true;
+            ErrorMessage = ex.Message;
+            _dialogs.Info(ex.Message);
         }
     }
 
@@ -300,13 +325,14 @@ public partial class TaskEditorViewModel : ObservableObject
             return;
         }
 
-        if (_id is not null && !string.IsNullOrEmpty(att.StoredFileName))
+        if (_id is not null && att.TaskId != Guid.Empty)
         {
             await _attachments.DeleteAsync(att.Id);
         }
         else
         {
-            _pendingFiles.RemoveAll(p => Path.GetFileName(p) == att.OriginalName);
+            _stagedAttachments.RemoveAll(a => a.Id == att.Id);
+            _attachments.DeleteStoredFile(att);
         }
 
         Attachments.Remove(att);
@@ -320,20 +346,20 @@ public partial class TaskEditorViewModel : ObservableObject
             return;
         }
 
-        var path = string.IsNullOrEmpty(att.StoredFileName)
-            ? _pendingFiles.FirstOrDefault(p => Path.GetFileName(p) == att.OriginalName)
-            : _attachments.GetFullPath(att);
-        if (path is null || !File.Exists(path))
+        if (!_attachments.TryOpen(att, out var error))
         {
-            _dialogs.Info("Dosya bulunamadı.");
-            return;
+            _dialogs.Info(error, "Ek açılamadı");
+        }
+    }
+
+    public void DiscardPendingAttachments()
+    {
+        foreach (var staged in _stagedAttachments)
+        {
+            _attachments.DeleteStoredFile(staged);
         }
 
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = path,
-            UseShellExecute = true
-        });
+        _stagedAttachments.Clear();
     }
 
     private int PackWeekdays()
@@ -363,6 +389,11 @@ public partial class TaskEditorViewModel : ObservableObject
         WdFri = (mask & WeekdayBits.Friday) != 0;
         WdSat = (mask & WeekdayBits.Saturday) != 0;
         WdSun = (mask & WeekdayBits.Sunday) != 0;
+    }
+
+    public sealed record AssigneeOption(Guid? Id, string Name)
+    {
+        public override string ToString() => Name;
     }
 
     public sealed record StatusOption(string Name, PlannerTaskStatus Value)

@@ -1,0 +1,133 @@
+<Window x:Class="Planner.App.Views.TableDocumentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding Title}"
+        Height="820" Width="1200"
+        MinHeight="520" MinWidth="800"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="CanResize"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBgBrush}">
+    <Window.Resources>
+        <Style x:Key="SheetTab" TargetType="Button" BasedOn="{StaticResource ChipButton}">
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="SheetTabActive" TargetType="Button" BasedOn="{StaticResource SheetTab}">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="RowBackground" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource SurfaceAltBrush}"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="HeadersVisibility" Value="All"/>
+            <Setter Property="RowHeaderWidth" Value="46"/>
+            <Setter Property="SelectionUnit" Value="Cell"/>
+            <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserDeleteRows" Value="False"/>
+            <Setter Property="CanUserSortColumns" Value="False"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="EnableRowVirtualization" Value="True"/>
+            <Setter Property="EnableColumnVirtualization" Value="True"/>
+            <Setter Property="GridLinesVisibility" Value="All"/>
+            <Setter Property="MinRowHeight" Value="24"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridRowHeader">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <DockPanel Margin="16,12,16,8">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource SecondaryButton}" Content="Word" Command="{Binding ExportWordCommand}" Margin="0,0,8,0"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="Excel" Command="{Binding ExportExcelCommand}" Margin="0,0,8,0"/>
+                <Button Style="{StaticResource SecondaryButton}" Content="PDF" Command="{Binding ExportPdfCommand}"/>
+            </StackPanel>
+            <StackPanel>
+                <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" FontSize="20" FontWeight="SemiBold"
+                         Background="Transparent" BorderThickness="0" Padding="0,2"/>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource MutedText}" FontSize="12" Margin="2,2,0,0"/>
+            </StackPanel>
+        </DockPanel>
+        <DockPanel Grid.Row="1" Margin="16,0,16,8">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding Limits}" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource ChipButton}" Content="Satır +" Click="OnAddRow"/>
+                <Button Style="{StaticResource ChipButton}" Content="Sütun +" Click="OnAddColumn"/>
+                <Button Style="{StaticResource ChipButton}" Content="Satır sil" Click="OnDeleteRow"/>
+                <Button Style="{StaticResource ChipButton}" Content="Sütun sil" Click="OnDeleteColumn"/>
+            </StackPanel>
+        </DockPanel>
+        <Grid Grid.Row="2" Margin="16,0,16,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="72"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Margin="0,0,8,0" Padding="8,0">
+                <TextBlock Text="{Binding CellRef}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Border>
+            <TextBlock Grid.Column="1" Text="fx" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"
+                       Foreground="{DynamicResource TextMutedBrush}"/>
+            <TextBox x:Name="FormulaBar" Grid.Column="2" Padding="10,6" KeyDown="OnFormulaKey"/>
+        </Grid>
+        <Border Grid.Row="3" Margin="16,0,16,0" Style="{StaticResource Card}" Padding="0" ClipToBounds="True">
+            <DataGrid x:Name="Grid"
+                      PreparingCellForEdit="OnPreparingCellForEdit"
+                      CellEditEnding="OnCellEditEnding"
+                      CurrentCellChanged="OnCurrentCellChanged"
+                      LoadingRow="OnLoadingRow"
+                      BeginningEdit="OnBeginningEdit"/>
+        </Border>
+        <DockPanel Grid.Row="4" Margin="16,8,16,4">
+            <Button DockPanel.Dock="Left" Style="{StaticResource ChipButton}" Content="+" ToolTip="Yeni sayfa" Click="OnAddSheet"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="SheetBar" Orientation="Horizontal"/>
+            </ScrollViewer>
+        </DockPanel>
+        <TextBlock Grid.Row="5" Margin="16,0,16,10" Text="{Binding Status}" Style="{StaticResource MutedText}" FontSize="11"/>
+    </Grid>
+</Window>

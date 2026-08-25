@@ -57,26 +57,62 @@ public sealed class LeaveKindOption
     public string Hint { get; }
 }
 
+public sealed class LeaveKindCardVm
+{
+    public LeaveKindCardVm(string name, string hint, LeaveEntryKind kind, Guid? typeId = null, bool isOther = false)
+    {
+        Name = name;
+        Hint = hint;
+        Kind = kind;
+        TypeId = typeId;
+        IsOther = isOther;
+    }
+
+    public string Name { get; }
+    public string Hint { get; }
+    public LeaveEntryKind Kind { get; }
+    public Guid? TypeId { get; }
+    public bool IsOther { get; }
+}
+
+public partial class LeaveKindCardSelectable : ObservableObject
+{
+    public LeaveKindCardSelectable(LeaveKindCardVm card) => Card = card;
+
+    public LeaveKindCardVm Card { get; }
+    public string Name => Card.Name;
+    public string Hint => Card.Hint;
+    [ObservableProperty] private bool _isSelected;
+}
+
 public partial class LeaveEditorViewModel : ObservableObject
 {
     private readonly LeaveCountContext _ctx;
     private readonly IReadOnlyList<LeaveType> _allTypes;
     private readonly bool _isNew;
+    private readonly bool _requireApproval;
+    private readonly Guid? _ownerUserId;
+    private readonly Guid? _serverLeaveId;
 
     public LeaveEditorViewModel(
         IReadOnlyList<LeaveType> types,
         LeaveRecord? existing,
         LeaveCountContext ctx,
-        LeaveEntryKind? presetKind = null)
+        LeaveEntryKind? presetKind = null,
+        bool requireApproval = false)
     {
         _ctx = ctx;
         _allTypes = types;
         _isNew = existing is null;
+        _requireApproval = requireApproval;
+        _ownerUserId = existing?.OwnerUserId;
+        _serverLeaveId = existing?.ServerLeaveId;
         Types = new ObservableCollection<LeaveType>(types.Where(t => t.Id != LeaveIds.TelafiliIzin && t.Id != LeaveIds.Telafi));
         Statuses.Add(new LeaveStatusOption("Planlandı", LeaveStatus.Planlandi));
         Statuses.Add(new LeaveStatusOption("Onaylandı", LeaveStatus.Onaylandi));
         Statuses.Add(new LeaveStatusOption("Kullanıldı", LeaveStatus.Kullanildi));
         Statuses.Add(new LeaveStatusOption("İptal", LeaveStatus.Iptal));
+        Statuses.Add(new LeaveStatusOption("Reddedildi", LeaveStatus.Reddedildi));
         HalfParts.Add(new HalfDayOption("Sabah", HalfDayKind.Morning));
         HalfParts.Add(new HalfDayOption("Öğleden sonra", HalfDayKind.Afternoon));
         KindOptions.Add(new LeaveKindOption("İzin", LeaveEntryKind.Leave, "Yıllık, mazeret ve diğer izinler. Yıllık bakiyeden düşen türler ayrı tutulur."));
@@ -95,7 +131,7 @@ public partial class LeaveEditorViewModel : ObservableObject
             Result = new LeaveRecord
             {
                 Id = Guid.NewGuid(),
-                Status = LeaveStatus.Onaylandi,
+                Status = requireApproval ? LeaveStatus.Planlandi : LeaveStatus.Onaylandi,
                 EntryKind = kind,
                 DurationKind = LeaveMath.IsLedgerKind(kind) ? LeaveDurationKind.Hourly : LeaveDurationKind.Daily,
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
@@ -104,7 +140,7 @@ public partial class LeaveEditorViewModel : ObservableObject
             };
             SelectedKind = KindOptions.First(k => k.Value == kind);
             SelectedType = Types.FirstOrDefault(t => t.Id == LeaveIds.Annual) ?? Types.FirstOrDefault();
-            SelectedStatus = Statuses.First(s => s.Value == LeaveStatus.Onaylandi);
+            SelectedStatus = Statuses.First(s => s.Value == Result.Status);
             SelectedDuration = DurationOptions.First(d => d.Value == Result.DurationKind);
             StartDate = DateTime.Today;
             EndDate = DateTime.Today;
@@ -144,6 +180,11 @@ public partial class LeaveEditorViewModel : ObservableObject
 
         RefreshUnitUi();
         RefreshPreview();
+        BuildKindCards(existing, presetKind);
+        StatusLocked = requireApproval;
+        ApprovalHint = requireApproval
+            ? "İş izni bir üst amire (veya izin yetkilisine) gider. Durumu siz değiştiremezsiniz."
+            : "";
     }
 
     public string WindowTitle { get; private set; }
@@ -157,6 +198,7 @@ public partial class LeaveEditorViewModel : ObservableObject
     public ObservableCollection<LeaveDurationOption> DurationOptions { get; } = new();
     public ObservableCollection<string> Hours { get; }
     public ObservableCollection<string> Minutes { get; }
+    public ObservableCollection<LeaveKindCardSelectable> KindCards { get; } = new();
 
     [ObservableProperty] private LeaveKindOption? _selectedKind;
     [ObservableProperty] private LeaveType? _selectedType;
@@ -178,6 +220,11 @@ public partial class LeaveEditorViewModel : ObservableObject
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _previewText = "";
     [ObservableProperty] private string _durationHint = "";
+    [ObservableProperty] private bool _statusLocked;
+    [ObservableProperty] private string _approvalHint = "";
+
+    public bool StatusUnlocked => !StatusLocked;
+    partial void OnStatusLockedChanged(bool value) => OnPropertyChanged(nameof(StatusUnlocked));
 
     public bool IsHourly => IsLedgerEntry || SelectedDuration?.Value == LeaveDurationKind.Hourly;
     public bool IsDaily => !IsLedgerEntry && SelectedDuration?.Value == LeaveDurationKind.Daily;
@@ -194,13 +241,75 @@ public partial class LeaveEditorViewModel : ObservableObject
     public bool ShowDurationPicker => IsRegularLeave;
     public string FirstHalfLabel => ShowLastHalf ? "İlk gün yarım" : "Yarım gün";
     public string EndDateLabel => IsHourly ? "Bitiş tarihi" : "Bitiş tarihi (dahil)";
-    public string KindHint => SelectedKind?.Hint ?? "";
+    [ObservableProperty] private string _kindHint = "";
+    [ObservableProperty] private int _wizardStep;
+    [ObservableProperty] private bool _showOtherTypes;
+
+    public bool IsKindStep => WizardStep == 0;
+    public bool IsTimeStep => WizardStep == 1;
+    public bool IsSummaryStep => WizardStep == 2;
+    public bool CanGoBack => WizardStep > 0;
+    public string PrimaryActionText => WizardStep >= 2 ? "Kaydet" : "Devam Et →";
+    public string StepTitle => WizardStep switch
+    {
+        0 => "İzinler",
+        1 => "Zaman",
+        _ => "Tamam"
+    };
+    public string StepSubtitle => WizardStep switch
+    {
+        0 => "Hangi tür kaydı eklemek istiyorsun?",
+        1 => "Lütfen bir tarih ve zaman seçin.",
+        _ => "Kayıt özeti. Kaydetmeden önce kontrol et."
+    };
+    public string SummaryKindText => ShowOtherTypes
+        ? (SelectedType?.Name ?? "İzin")
+        : (SelectedKindCard?.Name ?? SelectedKind?.Name ?? "İzin");
+    public string SummaryWhenText
+    {
+        get
+        {
+            var start = DateOnly.FromDateTime(StartDate);
+            var end = DateOnly.FromDateTime(EndDate);
+            var st = ParseTime(StartHour, StartMinute);
+            var et = ParseTime(EndHour, EndMinute);
+            if (st is null || et is null)
+            {
+                return LeaveMath.FormatDateRange(start, end);
+            }
+
+            return LeaveMath.FormatDateTimeRange(new LeaveRecord
+            {
+                StartDate = start,
+                EndDate = end,
+                StartTime = st,
+                EndTime = et,
+                DurationKind = LeaveDurationKind.Hourly
+            });
+        }
+    }
+
+    private LeaveKindCardSelectable? SelectedKindCard => KindCards.FirstOrDefault(c => c.IsSelected);
+
+    partial void OnWizardStepChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsKindStep));
+        OnPropertyChanged(nameof(IsTimeStep));
+        OnPropertyChanged(nameof(IsSummaryStep));
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(PrimaryActionText));
+        OnPropertyChanged(nameof(StepTitle));
+        OnPropertyChanged(nameof(StepSubtitle));
+        OnPropertyChanged(nameof(SummaryKindText));
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
 
     partial void OnSelectedKindChanged(LeaveKindOption? value)
     {
         var kind = value?.Value ?? LeaveEntryKind.Leave;
         WindowTitle = TitleFor(kind, _isNew);
         OnPropertyChanged(nameof(WindowTitle));
+        KindHint = value?.Hint ?? "";
         if (LeaveMath.IsLedgerKind(kind))
         {
             SelectedDuration = DurationOptions.First(d => d.Value == LeaveDurationKind.Hourly);
@@ -272,14 +381,209 @@ public partial class LeaveEditorViewModel : ObservableObject
         RefreshPreview();
     }
 
-    partial void OnStartHourChanged(string value) => RefreshPreview();
-    partial void OnStartMinuteChanged(string value) => RefreshPreview();
-    partial void OnEndHourChanged(string value) => RefreshPreview();
-    partial void OnEndMinuteChanged(string value) => RefreshPreview();
+    partial void OnStartHourChanged(string value)
+    {
+        RefreshPreview();
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
+
+    partial void OnStartMinuteChanged(string value)
+    {
+        RefreshPreview();
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
+
+    partial void OnEndHourChanged(string value)
+    {
+        RefreshPreview();
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
+
+    partial void OnEndMinuteChanged(string value)
+    {
+        RefreshPreview();
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
+
+    [RelayCommand]
+    private void SelectKindCard(object? obj)
+    {
+        if (obj is LeaveKindCardSelectable card)
+        {
+            ApplyKindCard(card);
+        }
+    }
+
+    [RelayCommand]
+    private void PrimaryAction()
+    {
+        if (WizardStep >= 2)
+        {
+            Save();
+            return;
+        }
+
+        GoNext();
+    }
+
+    [RelayCommand]
+    private void GoNext()
+    {
+        if (WizardStep == 0)
+        {
+            if (SelectedKindCard is null)
+            {
+                ErrorMessage = "Bir tür seç.";
+                return;
+            }
+
+            if (ShowOtherTypes && SelectedType is null)
+            {
+                ErrorMessage = "İzin türü seç.";
+                return;
+            }
+
+            HasStartTime = true;
+            HasEndTime = true;
+            ErrorMessage = "";
+            WizardStep = 1;
+            return;
+        }
+
+        if (WizardStep != 1)
+        {
+            return;
+        }
+
+        if (!TryValidateTimes(out var err))
+        {
+            ErrorMessage = err;
+            return;
+        }
+
+        ApplyDurationFromDates();
+        RefreshPreview();
+        ErrorMessage = "";
+        WizardStep = 2;
+        OnPropertyChanged(nameof(SummaryKindText));
+        OnPropertyChanged(nameof(SummaryWhenText));
+    }
+
+    [RelayCommand]
+    private void GoBack()
+    {
+        if (WizardStep <= 0)
+        {
+            return;
+        }
+
+        ErrorMessage = "";
+        WizardStep--;
+    }
+
+    private void BuildKindCards(LeaveRecord? existing, LeaveEntryKind? presetKind)
+    {
+        KindCards.Add(new LeaveKindCardSelectable(new LeaveKindCardVm(
+            "Yıllık izin", "Yıllık izin hakkından düşer. Hakkı sonradan girebilirsin.", LeaveEntryKind.Leave, LeaveIds.Annual)));
+        KindCards.Add(new LeaveKindCardSelectable(new LeaveKindCardVm(
+            "Telafili izin", "Telafi bakiyesinden düşer (borç). Tarih + saat + dakika.", LeaveEntryKind.TelafiliIzin)));
+        KindCards.Add(new LeaveKindCardSelectable(new LeaveKindCardVm(
+            "Telafi", "Telafi bakiyesine eklenir (alacak). İzin günü değildir.", LeaveEntryKind.Telafi)));
+        KindCards.Add(new LeaveKindCardSelectable(new LeaveKindCardVm(
+            "Diğer izin", "Mazeret, hastalık, ücretsiz ve özel türler.", LeaveEntryKind.Leave, isOther: true)));
+
+        LeaveKindCardSelectable pick;
+        if (existing is not null)
+        {
+            var kind = LeaveMath.ResolveKind(existing);
+            pick = kind switch
+            {
+                LeaveEntryKind.TelafiliIzin => KindCards[1],
+                LeaveEntryKind.Telafi => KindCards[2],
+                _ when existing.TypeId == LeaveIds.Annual => KindCards[0],
+                _ => KindCards[3]
+            };
+        }
+        else
+        {
+            pick = presetKind switch
+            {
+                LeaveEntryKind.TelafiliIzin => KindCards[1],
+                LeaveEntryKind.Telafi => KindCards[2],
+                _ => KindCards[0]
+            };
+        }
+
+        ApplyKindCard(pick);
+    }
+
+    private void ApplyKindCard(LeaveKindCardSelectable card)
+    {
+        foreach (var item in KindCards)
+        {
+            item.IsSelected = false;
+        }
+
+        card.IsSelected = true;
+        ShowOtherTypes = card.Card.IsOther;
+        SelectedKind = KindOptions.First(k => k.Value == card.Card.Kind);
+        if (card.Card.TypeId is { } id)
+        {
+            SelectedType = Types.FirstOrDefault(t => t.Id == id) ?? SelectedType;
+        }
+
+        KindHint = card.Card.Hint;
+        ErrorMessage = "";
+        OnPropertyChanged(nameof(SummaryKindText));
+    }
+
+    private void ApplyDurationFromDates()
+    {
+        if (IsLedgerEntry)
+        {
+            SelectedDuration = DurationOptions.First(d => d.Value == LeaveDurationKind.Hourly);
+            return;
+        }
+
+        SelectedDuration = DateOnly.FromDateTime(StartDate) == DateOnly.FromDateTime(EndDate)
+            ? DurationOptions.First(d => d.Value == LeaveDurationKind.Hourly)
+            : DurationOptions.First(d => d.Value == LeaveDurationKind.Range);
+        HasStartTime = true;
+        HasEndTime = true;
+    }
+
+    private bool TryValidateTimes(out string error)
+    {
+        var start = DateOnly.FromDateTime(StartDate);
+        var end = DateOnly.FromDateTime(EndDate);
+        if (end < start)
+        {
+            error = "Bitiş tarihi başlangıçtan önce olamaz.";
+            return false;
+        }
+
+        var startTime = ParseTime(StartHour, StartMinute);
+        var endTime = ParseTime(EndHour, EndMinute);
+        if (startTime is null || endTime is null)
+        {
+            error = "Saat ve dakikayı seç.";
+            return false;
+        }
+
+        if (LeaveMath.MinutesBetween(start.ToDateTime(startTime.Value), end.ToDateTime(endTime.Value)) <= 0)
+        {
+            error = "Bitiş, başlangıçtan sonra olmalı (tarih, saat ve dakika).";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
 
     [RelayCommand]
     private void Save()
     {
+        ApplyDurationFromDates();
         var entryKind = SelectedKind?.Value ?? LeaveEntryKind.Leave;
         var isLedger = LeaveMath.IsLedgerKind(entryKind);
         LeaveType? type;
@@ -347,7 +651,9 @@ public partial class LeaveEditorViewModel : ObservableObject
                 ? (SelectedEndHalf?.Value ?? HalfDayKind.Afternoon)
                 : HalfDayKind.None,
             Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
-            Status = SelectedStatus?.Value ?? LeaveStatus.Onaylandi,
+            Status = SelectedStatus?.Value ?? (_requireApproval ? LeaveStatus.Planlandi : LeaveStatus.Onaylandi),
+            OwnerUserId = _ownerUserId,
+            ServerLeaveId = _serverLeaveId,
             CreatedAt = Result?.CreatedAt ?? DateTime.Now
         };
         Result.DurationMinutes = LeaveMath.CountMinutes(Result, _ctx);
@@ -425,7 +731,7 @@ public partial class LeaveEditorViewModel : ObservableObject
             var statusNote = draft.Status.AffectsBalance()
                 ? "Onaylandı/Kullanıldı bakiyeye yansır"
                 : "Planlandı veya İptal bakiyeye yansımaz";
-            PreviewText = $"Süre: {LeaveMath.FormatMinutes(minutes, _ctx.WorkdayHours)} · {LeaveMath.FormatLedgerMinutes(signed, _ctx.WorkdayHours)} · {effect} · {statusNote}";
+            PreviewText = $"Süre: {LeaveMath.FormatHoursMinutes(minutes)} · {LeaveMath.FormatLedgerMinutes(signed)} · {effect} · {statusNote}";
             return;
         }
 
